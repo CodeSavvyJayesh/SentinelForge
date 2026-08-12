@@ -1,0 +1,30 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/*.pyc
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build / temporary files
+*.tmp
+*.temp
