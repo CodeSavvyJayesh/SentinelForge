@@ -1,14 +1,23 @@
-## this is fastapi app
 from fastapi import FastAPI
 
-app = FastAPI(
-    title="SentinelForge",
-    description="AI powered zero-trust devsecops security engine",
+from app.core.config import settings
+from app.api.v1.health import router as health_router
 
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="AI-powered Zero-Trust DevSecOps Security Engine",
+    version=settings.APP_VERSION
 )
+
+app.include_router(
+    health_router,
+    prefix="/api/v1"
+)
+
 
 @app.get("/")
 def root():
-    return{
-        "message": "running"
+    return {
+        "message": "SentinelForge API is running!"
     }
