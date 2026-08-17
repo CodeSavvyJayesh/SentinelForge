@@ -21,3 +21,5 @@ class User(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+    
+# its like entity model in springboot where we are writing all that stuff related to table columns 
