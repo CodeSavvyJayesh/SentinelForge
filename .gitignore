@@ -33,3 +33,6 @@ Thumbs.db
 # Build / temporary files
 *.tmp
 *.temp
+
+# Files this Cowork session drops into the project
+Claude outputs/
