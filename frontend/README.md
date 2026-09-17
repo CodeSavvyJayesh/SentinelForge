@@ -1,16 +1,36 @@
-# React + Vite
+# SentinelForge — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite. See the root [README](../README.md) for the full project.
 
-Currently, two official plugins are available:
+```powershell
+cd frontend
+copy .env.example .env      # sets VITE_API_BASE_URL
+npm install
+npm run dev                 # http://localhost:5173
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Script              | Purpose                                   |
+| ------------------- | ----------------------------------------- |
+| `npm run dev`       | Dev server with hot reload                |
+| `npm run build`     | Type-check (`tsc -b`) then production build |
+| `npm run typecheck` | Type-check only                           |
+| `npm run lint`      | ESLint (typescript-eslint, react-hooks)   |
+| `npm run test`      | Unit tests (Vitest)                       |
 
-## React Compiler
+## Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```
+src/
+├── config/      env.ts – reads and validates VITE_* variables
+├── services/    apiClient.ts (fetch wrapper, error envelope, timeouts), feature services
+├── hooks/       React hooks that call services and expose loading/success/error state
+├── types/       TypeScript mirrors of backend schemas
+├── components/  Reusable presentational components (no API calls)
+├── layouts/     App shell
+├── pages/       Screens composed from hooks + components
+├── utils/       Pure helpers (formatting)
+└── styles/      Design tokens and global CSS
+```
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Rule: components never call `fetch` directly — pages use hooks, hooks use services,
+services use the single `apiClient`.

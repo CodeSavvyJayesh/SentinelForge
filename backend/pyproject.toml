@@ -1,0 +1,38 @@
+[project]
+name = "sentinelforge-backend"
+version = "0.1.0"
+description = "SentinelForge API - AI-powered DevSecOps security platform"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: needs a reachable PostgreSQL test database (TEST_DATABASE_URL)",
+]
+filterwarnings = [
+    # Starlette 1.6 warns when plain httpx (instead of httpx2) backs TestClient.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["venv"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade,
+# S bandit (security), SIM simplify
+select = ["E", "W", "F", "I", "B", "UP", "S", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S608"]
+# Migrations that were already applied are historical records: never restyle them.
+"alembic/versions/453fd78e5b07_create_users_table.py" = ["UP", "I001", "W291", "E501"]
+
+[tool.ruff.format]
+exclude = ["alembic/versions/453fd78e5b07_create_users_table.py"]

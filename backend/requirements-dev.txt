@@ -1,0 +1,6 @@
+# Development / test tooling. Install: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.0.3
+# HTTP client used by FastAPI/Starlette TestClient (Starlette 1.6 prefers httpx2).
+httpx2==2.13.0
+ruff==0.15.11
