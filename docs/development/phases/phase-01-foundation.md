@@ -241,7 +241,7 @@ formatting helpers.
 | Frontend `tsc` strict type-check | ✅ pass | TypeScript 6.0 |
 | Frontend unit tests (18) | ✅ pass | Node 22 |
 | Browser run against live backend: Healthy, DB down, API down, tablet width, dark mode | ✅ | Chromium |
-| **On your Windows PC** (`npm install`, ESLint, Vitest, `vite build`, Python 3.13, your PostgreSQL) | ⏳ **not yet** | run `.\scripts\verify.ps1` |
+| **Windows PC** (Python 3.13.5, Node 22.17, local PostgreSQL): ruff, alembic upgrade/check, **pytest 31 passed**, ESLint, **Vitest 18 passed**, `tsc -b && vite build` | ✅ pass | `scripts/verify.ps1` |
 
 Honest limitation: the package registries were blocked in my environment, so I could not run
 `npm install`, ESLint with `typescript-eslint`, the real Vitest runner, or `vite build`. The code was
@@ -286,8 +286,11 @@ git add --renormalize .
   pinned requirements; test suite; Ruff; TypeScript frontend with typed API client and live status
   page; documentation.
 - **TESTED:** everything in section 6 marked ✅.
-- **REMAINING (your side):** rotate PostgreSQL password; run `scripts/verify.ps1` on Windows and
-  report any failure; `git add --renormalize .`; commit.
+- **VERIFIED ON WINDOWS (2026-09-17):** `scripts/verify.ps1` — all checks passed, 31 backend +
+  18 frontend tests, production build OK. Vitest pinned to 5 (npm peer-set crash with Vite 8),
+  `httpx2` pinned to 2.13.0.
+- **REMAINING (your side):** rotate the PostgreSQL password; `git add --renormalize .`;
+  push `phase-1-foundation` and merge it into `main`.
 - **Deferred on purpose:** Docker Compose (added when Ollama/vector DB arrive — for one local
   PostgreSQL it adds setup without value), CI workflow (Phase 14), rate limiting (with auth).
 

@@ -62,7 +62,10 @@ def database_available() -> None:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"Test database not reachable: {type(exc).__name__}")
+        # Show the driver's message so the cause (bad password, missing
+        # database, server down) is visible instead of just the class name.
+        reason = str(exc).strip().splitlines()[0][:300] if str(exc).strip() else type(exc).__name__
+        pytest.skip(f"Test database not reachable: {reason}")
 
 
 @pytest.fixture(scope="session")
