@@ -21,6 +21,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.security import CSRF_HEADER_NAME
 from app.schemas.error import ErrorResponse
 
 logger = get_logger("sentinelforge.app")
@@ -70,9 +71,11 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cfg.cors_origins,
-        allow_credentials=False,  # auth will use Authorization headers, not cookies
+        # Cookies carry the refresh token, so credentialed requests must be
+        # allowed. Safe because the origins are explicit (never "*").
+        allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", REQUEST_ID_HEADER],
+        allow_headers=["Authorization", "Content-Type", REQUEST_ID_HEADER, CSRF_HEADER_NAME],
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(SecurityHeadersMiddleware)

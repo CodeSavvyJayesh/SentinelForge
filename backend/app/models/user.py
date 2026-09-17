@@ -1,14 +1,23 @@
 """User account model."""
 
-from sqlalchemy import Boolean, String, true
-from sqlalchemy.orm import Mapped, mapped_column
+from enum import StrEnum
+
+from sqlalchemy import Boolean, Enum, String, true
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
 from app.models.mixins import TimestampMixin
 
 
+class UserRole(StrEnum):
+    """Authorisation role. Kept deliberately small; extend when a phase needs it."""
+
+    USER = "USER"
+    ADMIN = "ADMIN"
+
+
 class User(TimestampMixin, Base):
-    """A SentinelForge user. Roles and auth-related fields arrive in Phase 2."""
+    """A SentinelForge user."""
 
     __tablename__ = "users"
 
@@ -23,6 +32,22 @@ class User(TimestampMixin, Base):
         server_default=true(),
         nullable=False,
     )
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="user_role", native_enum=True, validate_strings=True),
+        default=UserRole.USER,
+        server_default=UserRole.USER.value,
+        nullable=False,
+    )
+
+    refresh_sessions: Mapped[list["RefreshSession"]] = relationship(  # noqa: F821
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role is UserRole.ADMIN
 
     def __repr__(self) -> str:  # never include hashed_password
-        return f"User(id={self.id!r}, username={self.username!r})"
+        return f"User(id={self.id!r}, username={self.username!r}, role={self.role!r})"
