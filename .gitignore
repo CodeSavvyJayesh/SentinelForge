@@ -1,11 +1,14 @@
 # Python
 backend/venv/
-backend/__pycache__/
-backend/**/*.pyc
+backend/.venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Environment variables
+# Environment variables (secrets) - only *.env.example files are committed
 .env
 .env.*
 !.env.example
@@ -13,6 +16,8 @@ __pycache__/
 # Node
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
+*.tsbuildinfo
 
 # IDE
 .idea/

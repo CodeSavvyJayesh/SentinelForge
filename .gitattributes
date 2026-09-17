@@ -1,0 +1,13 @@
+# Store text files with LF line endings in the repository on every OS.
+# Prevents "every line changed" diffs caused by Windows CRLF conversion.
+* text=auto eol=lf
+
+# Windows scripts keep CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
