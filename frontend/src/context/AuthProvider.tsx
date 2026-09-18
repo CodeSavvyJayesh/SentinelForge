@@ -3,9 +3,9 @@ import type { ReactNode } from 'react'
 
 import { authService } from '../services/api'
 import { ApiError, CSRF_COOKIE_NAME, toApiError } from '../services/apiClient'
-import { readCookie } from '../utils/cookies'
 import { tokenStore } from '../services/tokenStore'
 import type { LoginInput, RegisterInput, TokenResponse, User } from '../types/auth'
+import { readCookie } from '../utils/cookies'
 import { AuthContext, type AuthContextValue, type AuthStatus } from './authContext'
 
 /** Refresh this many seconds before the access token actually expires. */
@@ -13,10 +13,18 @@ const REFRESH_MARGIN_SECONDS = 60
 const MIN_REFRESH_DELAY_MS = 5_000
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading')
+  // Without the CSRF cookie there is no session to restore, so start as
+  // anonymous instead of flashing a loading state and calling setState in an
+  // effect (which would cause a cascading render).
+  const [status, setStatus] = useState<AuthStatus>(() =>
+    readCookie(CSRF_COOKIE_NAME) ? 'loading' : 'anonymous',
+  )
   const [user, setUser] = useState<User | null>(null)
   const [error, setError] = useState<ApiError | null>(null)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The scheduled refresh has to call back into applySession, which schedules
+  // the next one. A ref breaks that cycle without capturing a stale closure.
+  const applySessionRef = useRef<(session: TokenResponse) => void>(() => {})
 
   const clearTimer = useCallback(() => {
     if (refreshTimer.current) {
@@ -24,6 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimer.current = null
     }
   }, [])
+
+  const endSession = useCallback(() => {
+    clearTimer()
+    tokenStore.clear()
+    setUser(null)
+    setStatus('anonymous')
+  }, [clearTimer])
 
   const applySession = useCallback(
     (session: TokenResponse) => {
@@ -39,29 +54,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimer.current = setTimeout(() => {
         void authService
           .refresh()
-          .then(applySession)
+          .then((next) => applySessionRef.current(next))
           .catch(() => endSession())
       }, delay)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clearTimer],
+    [clearTimer, endSession],
   )
 
-  const endSession = useCallback(() => {
-    clearTimer()
-    tokenStore.clear()
-    setUser(null)
-    setStatus('anonymous')
-  }, [clearTimer])
+  useEffect(() => {
+    applySessionRef.current = applySession
+  }, [applySession])
 
   // On first load the access token is gone (it only lived in memory), but the
   // refresh cookie may still be valid: try to restore the session silently.
   useEffect(() => {
-    // No CSRF cookie means there is no session to restore: skip the round trip.
-    if (!readCookie(CSRF_COOKIE_NAME)) {
-      endSession()
-      return
-    }
+    if (!readCookie(CSRF_COOKIE_NAME)) return
     const controller = new AbortController()
     authService
       .refresh(controller.signal)
@@ -71,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return
         const apiError = toApiError(caught)
-        // 401 simply means "not signed in"; anything else is worth showing.
+        // 401/403 simply mean "not signed in"; anything else is worth showing.
         if (apiError.status !== 401 && apiError.status !== 403) setError(apiError)
         endSession()
       })

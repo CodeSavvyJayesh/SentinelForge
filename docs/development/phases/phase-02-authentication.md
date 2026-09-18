@@ -142,12 +142,21 @@ restore request entirely instead of firing a doomed call on every first visit.
 | **Browser run against the live backend** | ✅ register → wrong password → sign in → reload keeps session → sign out → reload stays signed out |
 | Browser storage inspection after login | ✅ `localStorage` and `sessionStorage` empty; only `sf_csrf` readable from JavaScript |
 | Audit trail after that run | ✅ `user.registered`, `auth.login_failed`, `auth.login_succeeded`, `auth.token_refreshed`, `auth.logout` |
-| On your Windows PC | ⏳ run `.\scripts\verify.ps1` |
+| On your Windows PC (`scripts/verify.ps1`) | ✅ backend 83 passed, Vitest 29 passed, production build — after fixing two ESLint findings, below |
 
 **The browser run found a real bug** that no unit test would have caught: CORS
 did not allow the `X-CSRF-Token` header, so the browser blocked `/auth/refresh`
 before it was ever sent — sessions silently failed to restore after a reload.
 Fixed, with a regression test for the preflight.
+
+**Your ESLint run found two more**, both genuine, in `AuthProvider.tsx`:
+`applySession` and `endSession` referenced each other before declaration (the
+scheduled refresh could capture a stale function), and the restore effect called
+`setState` synchronously, causing a cascading render. Fixed with a ref for the
+scheduling cycle and a lazy initial state. Those React Compiler rules could not
+run in my sandbox at the time; the project's exact ESLint (10.10 with
+typescript-eslint 8.70 and react-hooks 7.1) now runs there too, so this class of
+finding is caught before delivery from here on.
 
 ### Do the security tests actually bite?
 
