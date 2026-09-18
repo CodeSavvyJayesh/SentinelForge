@@ -91,6 +91,9 @@ def configure_logging(level: str = "INFO", log_format: str = "json") -> None:
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
     logging.getLogger("uvicorn.access").disabled = True
+    # Client libraries are chatty at INFO; keep our own events readable.
+    for noisy in ("httpx", "httpcore", "httpx2"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

@@ -91,7 +91,34 @@ Failure messages are generic; hostnames, ports and credentials are never include
 | `X-Frame-Options` | `DENY` |
 | `Referrer-Policy` | `no-referrer` |
 
+## Authentication
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/auth/register` | none | rate limited; first account becomes `ADMIN` |
+| `POST /api/v1/auth/login` | none | rate limited; returns an access token, sets `sf_refresh` (httpOnly) and `sf_csrf` cookies |
+| `POST /api/v1/auth/refresh` | refresh cookie + `X-CSRF-Token` | rotates the refresh token |
+| `POST /api/v1/auth/logout` | refresh cookie + `X-CSRF-Token` | 204; revokes the session |
+| `GET /api/v1/auth/me` | `Authorization: Bearer` | current user |
+| `GET /api/v1/users` | `Authorization: Bearer` + `ADMIN` | paginated account list |
+
+Protected endpoints expect `Authorization: Bearer <access token>` and answer
+`401 UNAUTHORIZED` (with `WWW-Authenticate: Bearer`) when the token is missing,
+expired, forged, or belongs to a deactivated account — the reason is never
+disclosed. A role mismatch answers `403 FORBIDDEN`.
+
+Too many login or registration attempts from one IP answer `429 RATE_LIMITED`
+with a `Retry-After` header (seconds).
+
+Cookie-authenticated endpoints additionally require the double-submit CSRF
+token: send the value of the readable `sf_csrf` cookie in `X-CSRF-Token`.
+Missing or mismatched → `403 CSRF_TOKEN_INVALID`.
+
+Full design and trade-offs: [security/authentication.md](../security/authentication.md).
+
 ## CORS
 
 Only origins listed in `CORS_ALLOWED_ORIGINS` (comma-separated, no `*`) may call the API from a
-browser. Credentials (cookies) are disabled; authentication will use the `Authorization` header.
+browser. Credentialed requests are allowed because the refresh token is a cookie — which is
+exactly why the origin list must stay explicit. Allowed request headers:
+`Authorization`, `Content-Type`, `X-Request-ID`, `X-CSRF-Token`.

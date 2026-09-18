@@ -1,4 +1,8 @@
 import type { ApiErrorEnvelope, ApiResult } from '../types/api'
+import { readCookie } from '../utils/cookies'
+
+export const CSRF_COOKIE_NAME = 'sf_csrf'
+export const CSRF_HEADER_NAME = 'X-CSRF-Token'
 
 /** Error codes produced by the client itself (the backend never sends these). */
 export const ClientErrorCode = {
@@ -53,6 +57,14 @@ export interface RequestOptions {
   timeoutMs?: number
   /** Non-2xx statuses whose body should be returned instead of thrown (e.g. 503 health). */
   acceptStatuses?: readonly number[]
+  /** Attach the in-memory access token as `Authorization: Bearer ...`. */
+  auth?: boolean
+  /** Send cookies (needed by /auth/refresh and /auth/logout). */
+  withCredentials?: boolean
+  /** Echo the CSRF cookie in a header (double-submit check). */
+  csrf?: boolean
+  /** Internal: prevents an endless refresh loop. */
+  retryOnUnauthorized?: boolean
 }
 
 export interface ApiClient {
@@ -65,6 +77,13 @@ export interface ApiClientConfig {
   baseUrl: string | null
   fetchImpl?: FetchLike
   defaultTimeoutMs?: number
+  /** Supplies the current access token (kept in memory, never in storage). */
+  getAccessToken?: () => string | null
+  /** Called once when an authenticated request gets 401; return true if a new
+   *  token was obtained, and the request is retried. */
+  onUnauthorized?: () => Promise<boolean>
+  /** Reads the CSRF cookie; overridable in tests. */
+  readCsrfToken?: () => string | null
 }
 
 const REQUEST_ID_HEADER = 'X-Request-ID'
@@ -90,6 +109,9 @@ export function createApiClient({
   // Wrapped so `fetch` is never invoked with a foreign `this` ("Illegal invocation").
   fetchImpl = (input, init) => fetch(input, init),
   defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
+  getAccessToken = () => null,
+  onUnauthorized,
+  readCsrfToken = () => readCookie(CSRF_COOKIE_NAME),
 }: ApiClientConfig): ApiClient {
   async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
     if (!baseUrl) {
@@ -100,8 +122,17 @@ export function createApiClient({
       })
     }
 
-    const { method = 'GET', body, signal, timeoutMs = defaultTimeoutMs, acceptStatuses = [] } =
-      options
+    const {
+      method = 'GET',
+      body,
+      signal,
+      timeoutMs = defaultTimeoutMs,
+      acceptStatuses = [],
+      auth = false,
+      withCredentials = false,
+      csrf = false,
+      retryOnUnauthorized = true,
+    } = options
 
     const controller = new AbortController()
     let timedOut = false
@@ -114,6 +145,14 @@ export function createApiClient({
 
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
+    if (auth) {
+      const token = getAccessToken()
+      if (token) headers.Authorization = `Bearer ${token}`
+    }
+    if (csrf) {
+      const csrfToken = readCsrfToken()
+      if (csrfToken) headers[CSRF_HEADER_NAME] = csrfToken
+    }
 
     try {
       let response: Response
@@ -124,6 +163,7 @@ export function createApiClient({
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
           signal: controller.signal,
+          credentials: withCredentials ? 'include' : 'same-origin',
         })
         text = await response.text()
       } catch (cause) {
@@ -160,6 +200,14 @@ export function createApiClient({
 
       if (response.ok || acceptStatuses.includes(response.status)) {
         return { data: payload as T, status: response.status, requestId }
+      }
+
+      // Expired access token: refresh once, then replay the original request.
+      if (response.status === 401 && auth && retryOnUnauthorized && onUnauthorized) {
+        const refreshed = await onUnauthorized()
+        if (refreshed) {
+          return request<T>(path, { ...options, retryOnUnauthorized: false })
+        }
       }
 
       if (isErrorEnvelope(payload)) {

@@ -45,8 +45,12 @@ python -m venv venv                  # skip if venv already exists
 python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 copy .env.example .env
-notepad .env                         # set DATABASE_URL and TEST_DATABASE_URL
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into JWT_SECRET
+notepad .env                         # set DATABASE_URL, TEST_DATABASE_URL and JWT_SECRET
 ```
+
+`JWT_SECRET` is required: the API refuses to start without it, and changing it
+signs everyone out (existing access tokens stop verifying).
 
 URL-encode special characters in passwords inside URLs (`@` → `%40`, `#` → `%23`, `%` → `%25`).
 
@@ -72,7 +76,9 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. With the backend running you should see **Healthy**.
+Open <http://localhost:5173>. Create an account — **the first account becomes the
+administrator** — then sign in. You should see the system status page, and the
+Administration panel if you are the admin.
 Stop PostgreSQL → Refresh → **Unhealthy / PostgreSQL Down**. Stop the backend → Refresh →
 **API unavailable / NETWORK_ERROR**.
 
@@ -81,7 +87,7 @@ Stop PostgreSQL → Refresh → **Unhealthy / PostgreSQL Down**. Stop the backen
 ```powershell
 # backend (backend/, venv active)
 python scripts/create_test_database.py   # once; needs CREATEDB or use the SQL above
-python -m pytest                          # 31 tests; DB tests skip if TEST_DATABASE_URL missing
+python -m pytest                          # 82 tests; DB tests skip if TEST_DATABASE_URL missing
 python -m pytest -m "not integration"     # fast tests, no database
 python -m ruff check .
 python -m ruff format --check .
@@ -117,6 +123,9 @@ git status          # the earlier "every line changed" noise disappears
 | `password authentication failed` | wrong password, or special characters not URL-encoded |
 | Health shows `Database connection failed` | PostgreSQL service stopped (Services → postgresql-x64-…) |
 | UI shows `NOT_CONFIGURED` | `frontend/.env` missing `VITE_API_BASE_URL`; restart `npm run dev` |
+| Startup error `JWT_SECRET Field required` | add `JWT_SECRET` (48 random characters) to `backend/.env` |
+| Signed out on every reload | the refresh cookie was blocked: check `CORS_ALLOWED_ORIGINS` and that both apps use `localhost` (not `127.0.0.1` on one side) |
+| `429 Too many attempts` while testing logins | the per-IP rate limit; wait `Retry-After` seconds or restart the API |
 | UI shows `NETWORK_ERROR` but backend is up | `CORS_ALLOWED_ORIGINS` must include `http://localhost:5173` |
 | `Refusing to run tests … must end with '_test'` | fix `TEST_DATABASE_URL` |
 | `Activate.ps1 cannot be loaded` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |

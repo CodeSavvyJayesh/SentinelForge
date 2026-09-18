@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, toApiError } from '../services/apiClient'
-import { apiClient } from '../services/api'
-import { createHealthService, type HealthService } from '../services/healthService'
+import { healthService } from '../services/api'
+import type { HealthService } from '../services/healthService'
 import type { ApiResult } from '../types/api'
 import type { HealthResponse } from '../types/health'
 
@@ -11,10 +11,8 @@ export type HealthState =
   | { status: 'success'; result: ApiResult<HealthResponse> }
   | { status: 'error'; error: ApiError }
 
-const defaultHealthService = createHealthService(apiClient)
-
 /** Loads backend health once on mount; `refresh()` re-checks on demand. */
-export function useHealth(service: HealthService = defaultHealthService) {
+export function useHealth(service: HealthService = healthService) {
   const [state, setState] = useState<HealthState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
 

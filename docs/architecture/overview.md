@@ -28,6 +28,7 @@ flowchart LR
 | API | `app/api/v1` | HTTP: routing, status codes, dependency injection | contain business logic or SQL |
 | Schemas | `app/schemas` | Pydantic request/response contracts | import ORM models |
 | Services | `app/services` | Business logic, orchestration | know about HTTP objects |
+| Repositories | `app/repositories` | Database queries | decide policy |
 | Models | `app/models` | ORM tables and relationships | contain business logic |
 | Core | `app/core` | Config, DB engine/session, logging, errors, middleware, deps | depend on features |
 
@@ -97,7 +98,7 @@ components (presentational only)
 | FastAPI app, config, logging, errors, health | Implemented (Phase 1) |
 | PostgreSQL + Alembic, `users` table | Implemented (Phase 1) |
 | React + TS shell, system status page | Implemented (Phase 1) |
-| Authentication / RBAC | Phase 2 |
+| Authentication, sessions, roles, audit log | Implemented (Phase 2) — see [security/authentication.md](../security/authentication.md) |
 | Projects, repositories, ingestion | Phases 3–4 |
 | Analysis engine, scan orchestration | Phases 5–6 |
 | RAG, Ollama LLM, risk engine | Phases 7–9 |

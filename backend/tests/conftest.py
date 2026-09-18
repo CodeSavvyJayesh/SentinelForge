@@ -34,6 +34,12 @@ os.environ["DATABASE_URL"] = (
     TEST_DATABASE_URL or "postgresql+psycopg://unused:unused@127.0.0.1:9/unconfigured_test"
 )
 os.environ["ENVIRONMENT"] = "test"
+# Cheap password hashing so the suite stays fast; production cost is asserted
+# separately in tests/unit/test_password_hashing.py.
+os.environ.setdefault("SCRYPT_N", "1024")
+os.environ.setdefault("SCRYPT_P", "1")
+os.environ.setdefault("JWT_SECRET", "test-secret-key-that-is-long-enough-32+")
+os.environ.setdefault("AUTH_RATE_LIMIT_ATTEMPTS", "5")
 os.environ["DB_CONNECT_TIMEOUT_SECONDS"] = "2"
 os.environ["LOG_FORMAT"] = "text"
 os.environ["ENABLE_API_DOCS"] = "true"
@@ -46,11 +52,37 @@ from app.core.database import engine  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> Iterator[None]:
+    """Each test starts with a clean rate-limit window."""
+    from app.core.deps import _AuthRateLimiterHolder
+
+    _AuthRateLimiterHolder.reset()
+    yield
+    _AuthRateLimiterHolder.reset()
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     """A fresh app instance. Server errors become 500 responses, not raised exceptions."""
     with TestClient(create_app(), raise_server_exceptions=False) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def api_client(db_session: Session) -> Iterator[TestClient]:
+    """Client whose requests share one transaction that is rolled back afterwards.
+
+    Endpoints may call ``commit()``; the surrounding transaction still undoes
+    everything, so database tests never leave rows behind.
+    """
+    from app.core.deps import get_db
+
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: db_session
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="session")

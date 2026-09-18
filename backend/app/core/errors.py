@@ -72,12 +72,15 @@ class AppError(Exception):
         message: str,
         status_code: int = HTTPStatus.BAD_REQUEST,
         details: Any = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = int(status_code)
         self.details = details
+        # e.g. WWW-Authenticate on 401, Retry-After on 429.
+        self.headers = headers
 
 
 def _request_id(request: Request) -> str | None:
@@ -119,6 +122,7 @@ async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
         code=exc.code,
         message=exc.message,
         details=exc.details,
+        headers=exc.headers,
     )
 
 

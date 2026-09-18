@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/core/config.py -> parents[2] == backend/
@@ -23,6 +23,7 @@ ENV_FILE: Path = BACKEND_DIR / ".env"
 Environment = Literal["development", "test", "production"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 LogFormat = Literal["json", "text"]
+CookieSameSite = Literal["lax", "strict", "none"]
 
 
 class Settings(BaseSettings):
@@ -53,6 +54,29 @@ class Settings(BaseSettings):
     DB_CONNECT_TIMEOUT_SECONDS: int = Field(default=5, ge=1)
     DB_ECHO: bool = False
 
+    # --- Authentication ----------------------------------------------------
+    # Signing key for access tokens. Generate with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+    JWT_SECRET: str = Field(..., min_length=32, description="HMAC key for access tokens")
+    ACCESS_TOKEN_TTL_MINUTES: int = Field(default=15, ge=1, le=120)
+    REFRESH_TOKEN_TTL_DAYS: int = Field(default=14, ge=1, le=90)
+
+    # Password policy and scrypt cost. Higher SCRYPT_N is safer but slower:
+    # 2**15 uses ~32 MiB and ~50-150 ms per hash on a typical laptop.
+    PASSWORD_MIN_LENGTH: int = Field(default=12, ge=8, le=128)
+    SCRYPT_N: int = Field(default=2**15, ge=2**10)
+    SCRYPT_R: int = Field(default=8, ge=1)
+    SCRYPT_P: int = Field(default=2, ge=1)
+
+    # Refresh-token cookie. COOKIE_SECURE must be true anywhere but localhost.
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: CookieSameSite = "lax"
+    COOKIE_DOMAIN: str | None = None
+
+    # Brute-force protection for login/register (per client IP).
+    AUTH_RATE_LIMIT_ATTEMPTS: int = Field(default=10, ge=1)
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=300, ge=1)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"
@@ -79,6 +103,16 @@ class Settings(BaseSettings):
         if "*" in value:
             raise ValueError("CORS_ALLOWED_ORIGINS must list explicit origins; '*' is not allowed")
         return value
+
+    @model_validator(mode="after")
+    def _check_cookie_and_secret_safety(self) -> "Settings":
+        if self.COOKIE_SAMESITE == "none" and not self.COOKIE_SECURE:
+            raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
+        if self.is_production and not self.COOKIE_SECURE:
+            raise ValueError("COOKIE_SECURE must be true in production")
+        if self.is_production and self.DEBUG:
+            raise ValueError("DEBUG must be false in production")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

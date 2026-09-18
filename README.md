@@ -2,7 +2,7 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 1 — Foundation** (backend + frontend skeleton, database, health, conventions).
+> Status: **Phase 2 — Authentication** complete (foundation, accounts, sessions, roles).
 > Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
 > planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
@@ -36,21 +36,24 @@ flowchart TD
 Design: a **modular monolith** (one FastAPI service with clearly separated modules), built
 phase by phase. Details: [docs/architecture/overview.md](docs/architecture/overview.md).
 
-## What works today (Phase 1)
+## What works today (Phases 1–2)
 
 | Area | Implemented |
 | --- | --- |
 | Backend | FastAPI app factory, typed settings, structured JSON logging, request IDs, standard error envelope, CORS, security headers |
 | Health | `GET /api/v1/health/live` (process) and `GET /api/v1/health` (PostgreSQL check, 503 when down) |
-| Database | PostgreSQL, SQLAlchemy 2.x, Alembic migrations, `users` table with timezone-aware timestamps |
-| Frontend | React 19 + TypeScript, typed API client, live **System status** page with loading / error / retry states |
-| Quality | 31 backend tests (pytest, incl. migration tests on real PostgreSQL), 18 frontend unit tests (Vitest), Ruff, ESLint |
+| Auth | Register / login / refresh / logout / me, scrypt password hashing, JWT access tokens, rotating httpOnly refresh cookies with reuse detection, CSRF protection, per-IP rate limiting, USER/ADMIN roles, audit log |
+| Database | PostgreSQL, SQLAlchemy 2.x, Alembic migrations: `users`, `refresh_sessions`, `audit_logs` |
+| Frontend | React 19 + TypeScript, typed API client, sign-in / sign-up, session restore after reload, admin account list, live **System status** page |
+| Quality | 82 backend tests (pytest, incl. PostgreSQL integration), 29 frontend unit tests (Vitest), Ruff, ESLint |
+
+Security design and its trade-offs: [docs/security/authentication.md](docs/security/authentication.md).
 
 ## Technology stack
 
 Python 3.13 · FastAPI · Pydantic Settings · SQLAlchemy 2 · Alembic · PostgreSQL · psycopg 3 ·
-React 19 · TypeScript · Vite · pytest · Vitest · Ruff · ESLint.
-Planned: JWT auth, Ollama, ChromaDB/FAISS, Semgrep/SonarQube adapters, Docker Compose, GitHub Actions.
+PyJWT · React 19 · TypeScript · Vite · pytest · Vitest · Ruff · ESLint.
+Planned: Ollama, ChromaDB/FAISS, Semgrep/SonarQube adapters, Docker Compose, GitHub Actions.
 
 ## Quick start (Windows / PowerShell)
 
@@ -71,7 +74,8 @@ cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-copy .env.example .env          # then edit DATABASE_URL and TEST_DATABASE_URL
+copy .env.example .env          # then edit DATABASE_URL, TEST_DATABASE_URL and JWT_SECRET
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # value for JWT_SECRET
 python -m alembic upgrade head  # apply migrations
 python -m uvicorn app.main:app --reload
 ```
@@ -129,8 +133,9 @@ SentinelForge/
 │   │   ├── api/v1/        HTTP endpoints (thin) + router aggregation
 │   │   ├── core/          config, database, logging, middleware, errors, deps
 │   │   ├── models/        SQLAlchemy ORM models (+ mixins)
+│   │   ├── repositories/  database queries (no business logic)
 │   │   ├── schemas/       Pydantic request/response models
-│   │   ├── services/      business logic
+│   │   ├── services/      business logic (auth, health)
 │   │   └── main.py        application factory
 │   ├── alembic/           migrations
 │   ├── scripts/           helper scripts (create test database)
@@ -144,8 +149,8 @@ SentinelForge/
 
 | Phase | Milestone | Status |
 | --- | --- | --- |
-| 1 | Foundation | ✅ Implemented, awaiting review |
-| 2 | Authentication (JWT, roles) | Planned |
+| 1 | Foundation | ✅ Done |
+| 2 | Authentication (JWT, roles) | ✅ Done |
 | 3 | Projects & ownership | Planned |
 | 4 | Repository ingestion & language detection | Planned |
 | 5 | Analysis engine (rules, AST, static analyzer adapters) | Planned |
@@ -159,8 +164,9 @@ SentinelForge/
 
 ## Limitations (current)
 
-- No authentication yet: do not expose the API outside localhost.
-- No vulnerability analysis exists yet — Phase 1 is infrastructure only.
+- No vulnerability analysis exists yet — Phases 1–2 are infrastructure and accounts.
+- No password reset, email verification or two-factor authentication.
+- Rate-limit counters live in one process (Redis planned when workers multiply).
 - No Docker setup yet (planned once more services exist).
 
 ## Documentation
@@ -168,4 +174,6 @@ SentinelForge/
 - [Architecture overview](docs/architecture/overview.md)
 - [API conventions](docs/api/conventions.md)
 - [Development setup](docs/development/setup.md)
+- [Security: authentication model](docs/security/authentication.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
+- [Phase 2 report](docs/development/phases/phase-02-authentication.md)
