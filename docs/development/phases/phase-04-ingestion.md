@@ -19,7 +19,7 @@ project page now says scanning arrives in Phase 6 and shows nothing simulated.
 | Backend | 9 files added, 7 changed |
 | Database | 1 migration (`def97007d9c9`): `repositories` |
 | Endpoints | upload, git connect, list, get, delete |
-| Backend tests | 121 new (228 total) |
+| Backend tests | 122 new (229 total) |
 | Frontend | repository panel on the project page; 14 new tests (51 total) |
 | Docs | this report, `security/ingestion.md`, API conventions, architecture, `.env.example` |
 
@@ -172,7 +172,7 @@ language bar, branch and commit.
 
 | Check | Result |
 | --- | --- |
-| `pytest` — 228 tests (121 new) against real PostgreSQL | ✅ pass |
+| `pytest` — 229 tests (122 new) against real PostgreSQL and on Windows | ✅ pass |
 | `ruff check` / `ruff format --check` | ✅ pass |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | ✅ pass |
 | Frontend type-check (strict), ESLint with your exact config, 51 tests | ✅ pass |
@@ -248,7 +248,70 @@ test would have caught:
 
 ---
 
-## 8. Status
+## 8. What running it on Windows found
+
+Everything above was verified on Linux. The first Windows run produced four
+failures and, after the first attempt at fixing them, a **hang** — and that
+sequence taught more than the rest of the phase.
+
+### One real defect in the product: a clone was not actually bounded
+
+`subprocess.run(timeout=...)` does not bound a `git clone`. Git hands the
+network transfer to a child of its own, `git-remote-https`, and that child
+inherits stdout and stderr. When the timeout fires, Python kills **the process
+it started** — the grandchild is still alive holding the pipes, and the call
+then blocks while collecting output. The timeout has fired and the request
+hangs anyway.
+
+That is exactly the resource exhaustion `CLONE_TIMEOUT_SECONDS` exists to
+prevent: one dead or malicious host could hold a worker indefinitely. The
+clone now runs in its own process group (its own console group on Windows) and
+the **whole group** is killed on timeout, with a bounded drain afterwards. A
+test pins it: against a server that accepts the connection and never answers,
+the call returns in seconds.
+
+### A second real defect: the sanitised environment was too sanitised
+
+`_git_environment()` deliberately gives git almost nothing — no user config, no
+credential helpers, no prompts. On Windows, the libraries behind sockets, DNS
+and the certificate store all read `SystemRoot`, so removing it can make a
+clone fail for a reason that looks nothing like the cause. Windows-required
+variables are now carried through; everything else still goes.
+
+### Three tests that asserted a platform instead of a rule
+
+| Test | What it assumed | What it should assert |
+| --- | --- | --- |
+| Extracted permissions | `stat()` returns `0o644` | **no execute bit survives** — Windows has no POSIX mode at all, and `chmod` there only toggles the read-only flag |
+| The stalling server | git opens exactly one connection | the call **returns quickly with a readable error** |
+| Symlink handling | `os.symlink` always works | skip where the OS refuses (it needs a privilege a normal Windows account lacks) |
+
+A test that encodes the machine it was written on fails on every other machine,
+and each of those failures costs someone an hour deciding whether the product
+is broken.
+
+### And one self-inflicted wound: a hang is worse than a skip
+
+Four clone tests *skipped* on Windows because the helper only looked for
+`git-http-backend` in POSIX paths. Making it use `git --exec-path` found the
+Git for Windows copy and those tests started running — against a small CGI
+server that had only ever been proven on Linux. Its handler thread blocked
+inside the CGI, `server_close()` waits for non-daemon handler threads, and the
+whole run stopped dead: no error, no timeout, no information.
+
+A skip tells you something is untested. A hang tells you nothing and costs you
+the rest of the run. The harness now skips on Windows until it is genuinely
+verified there, and it can no longer hang anywhere: daemon handler threads, a
+timeout on the CGI, and a socket timeout. The change that caused this was
+shipped without any way to test it — which is the same mistake as the three
+tests above, one level up.
+
+**Current Windows result:** 224 passed, 5 skipped, 37 seconds. The skips are
+the four clone tests and the symlink test, each with a reason printed.
+
+---
+
+## 9. Status
 
 - **COMPLETED:** `repositories` table, zip upload with full archive hardening,
   git clone with URL validation and a sandboxed command, isolated workspaces,
@@ -263,14 +326,14 @@ test would have caught:
   the DevSecOps phase), re-ingesting a repository in place (delete and add
   is honest, and cheap, until scans reference a repository).
 
-## 9. Next milestone — Phase 5: Static analysis engine
+## 10. Next milestone — Phase 5: Static analysis engine
 
 - Language-specific analysers chosen from the detected language
 - An AST/rule pass over the ingested workspace, in a sandbox, with no execution
 - Findings normalised into one shape (rule id, file, line, severity, evidence)
 - CWE mapping, and the first real vulnerability records in the database
 
-## 10. Study checklist
+## 11. Study checklist
 
 1. Why is `zipfile.extractall` unsafe, and what exactly does `safe_member_path` refuse?
 2. Why is the expanded size checked twice — before and during extraction?
@@ -282,3 +345,5 @@ test would have caught:
 8. Why does a failed ingest commit the transaction itself?
 9. Which three controls turned out to be untested, and how were the tests fixed?
 10. Why is the repository row deleted before its files, and not the other way round?
+11. Why does `subprocess.run(timeout=...)` fail to bound a `git clone`, and what fixes it?
+12. Which of the Windows failures were product bugs and which were bad tests — and how would you tell the difference next time?
