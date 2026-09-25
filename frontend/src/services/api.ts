@@ -3,6 +3,7 @@ import { createApiClient } from './apiClient'
 import { createAuthService } from './authService'
 import { createHealthService } from './healthService'
 import { createProjectService } from './projectService'
+import { createRepositoryService } from './repositoryService'
 import { createUserService } from './userService'
 import { tokenStore } from './tokenStore'
 
@@ -31,3 +32,4 @@ export const authService = createAuthService(apiClient)
 export const healthService = createHealthService(apiClient)
 export const userService = createUserService(apiClient)
 export const projectService = createProjectService(apiClient)
+export const repositoryService = createRepositoryService(apiClient)

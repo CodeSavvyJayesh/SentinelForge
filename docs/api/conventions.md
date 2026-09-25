@@ -134,6 +134,40 @@ confirm the id exists and let someone map the database by walking ids.
 Codes: `PROJECT_NOT_FOUND` (404), `PROJECT_NAME_TAKEN` (409),
 `PROJECT_LIMIT_REACHED` (409).
 
+## Repositories
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/projects/{id}/repositories/upload` | Bearer | `multipart/form-data`, field `file`; a `.zip` archive |
+| `POST /api/v1/projects/{id}/repositories/git` | Bearer | JSON `{repository_url, branch?}`; clones one commit |
+| `GET /api/v1/projects/{id}/repositories` | Bearer | repositories of that project |
+| `GET /api/v1/repositories/{id}` | Bearer | one repository |
+| `DELETE /api/v1/repositories/{id}` | Bearer | 204; also deletes the workspace |
+
+A repository is reached through its project, so a project or repository owned by
+someone else answers the same `404` as one that does not exist. `workspace_path`
+is never returned: where the code sits on disk is infrastructure, not data.
+
+Ingestion is refused rather than sanitised, and the reason is a stable code:
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `ARCHIVE_TOO_LARGE` | 413 | over `MAX_ARCHIVE_BYTES` |
+| `ARCHIVE_INVALID` | 400 | not a readable zip |
+| `ARCHIVE_UNSAFE` | 400 | path escaping the target folder, symlink, or special file |
+| `ARCHIVE_TOO_MANY_FILES` | 400 | over `MAX_FILES` |
+| `ARCHIVE_EXPANDS_TOO_MUCH` | 400 | zip bomb: expanded size or compression ratio over the limit |
+| `REPOSITORY_EMPTY` | 400 | nothing analysable after ignored folders were skipped |
+| `REPOSITORY_URL_INVALID` | 400 | scheme not `https://`, private/loopback host, credentials in the URL, or a leading `-` |
+| `CLONE_FAILED` | 400 | git could not clone (missing branch, private repo, unreachable host, timeout) |
+| `GIT_UNAVAILABLE` | 503 | git is not installed on the server |
+| `REPOSITORY_LIMIT_REACHED` | 409 | over `MAX_REPOSITORIES_PER_PROJECT` |
+| `REPOSITORY_NOT_FOUND` | 404 | no such repository, or not yours |
+
+A rejected upload or clone still leaves a row with `status: "FAILED"` and a
+safe `error_message`, so the attempt is visible instead of silently vanishing.
+The workspace is deleted in that case.
+
 ## CORS
 
 Only origins listed in `CORS_ALLOWED_ORIGINS` (comma-separated, no `*`) may call the API from a

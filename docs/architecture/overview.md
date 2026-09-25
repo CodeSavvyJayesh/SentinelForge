@@ -91,6 +91,23 @@ components (presentational only)
 - Services validate response shape at runtime (never trust the network).
 - Every screen handles loading, success, error and retry.
 
+## Ingestion
+
+Untrusted source code enters the system in `app/ingestion/`, and the rule for
+every module there is that **code is data, never something to run**:
+
+```
+upload / git URL  →  limits + validation  →  isolated workspace  →  file summary
+                     (archive.py, git_clone.py)   (workspace.py)     (language.py)
+```
+
+- One directory per repository under `WORKSPACE_ROOT`; the database stores a
+  *relative* path, so the root stays deployment configuration.
+- Nothing from an archive or repository is executed: no build, no hooks, no
+  submodules, and every extracted file lands as `0644` data.
+- Limits (size, expansion ratio, file count, per-file size, clone timeout) are
+  settings, so a deployment can tighten them without a code change.
+
 ## Current vs planned components
 
 | Component | Status |
@@ -100,7 +117,7 @@ components (presentational only)
 | React + TS shell, system status page | Implemented (Phase 1) |
 | Authentication, sessions, roles, audit log | Implemented (Phase 2) — see [security/authentication.md](../security/authentication.md) |
 | Projects with per-user ownership | Implemented (Phase 3) |
-| Repositories, ingestion | Phase 4 |
+| Repositories, ingestion (zip upload, git clone, language detection) | Implemented (Phase 4) — see [security/ingestion.md](../security/ingestion.md) |
 | Analysis engine, scan orchestration | Phases 5–6 |
 | RAG, Ollama LLM, risk engine | Phases 7–9 |
 | Patch generation & validation | Phases 10–11 |

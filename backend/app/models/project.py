@@ -38,6 +38,11 @@ class Project(TimestampMixin, Base):
     language: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     owner: Mapped["User"] = relationship(back_populates="projects")  # noqa: F821
+    repositories: Mapped[list["Repository"]] = relationship(  # noqa: F821
+        back_populates="project",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"Project(id={self.id!r}, name={self.name!r}, owner_id={self.owner_id!r})"

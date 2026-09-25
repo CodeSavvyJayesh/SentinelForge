@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ErrorState } from '../components/ErrorState'
 import { FormField } from '../components/FormField'
 import { LoadingState } from '../components/LoadingState'
+import { RepositoryPanel } from '../components/RepositoryPanel'
 import { useProject } from '../hooks/useProject'
 import { projectService } from '../services/api'
 import { toApiError } from '../services/apiClient'
@@ -116,7 +117,7 @@ function ProjectView({
             </div>
             <div>
               <dt>Language</dt>
-              <dd>{project.language ?? 'Detected when the repository is scanned'}</dd>
+              <dd>{project.language ?? 'Detected per repository, below'}</dd>
             </div>
             <div>
               <dt>Created</dt>
@@ -130,11 +131,13 @@ function ProjectView({
         </div>
       )}
 
+      <RepositoryPanel projectId={project.id} defaultBranch={project.default_branch} />
+
       <div className="panel panel--planned">
         <h2 className="panel__title">Scans</h2>
         <p>
-          Repository ingestion arrives in Phase 4 and scanning in Phase 6. Nothing is simulated
-          here in the meantime.
+          Scanning arrives in Phase 6. Connected code is stored and summarised now; nothing is
+          analysed or simulated yet.
         </p>
       </div>
 

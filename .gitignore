@@ -36,3 +36,6 @@ Thumbs.db
 
 # Files this Cowork session drops into the project
 Claude outputs/
+
+# Ingested repositories (Phase 4): user code, never committed
+backend/workspaces/
