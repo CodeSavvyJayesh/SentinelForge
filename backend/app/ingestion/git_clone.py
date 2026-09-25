@@ -24,6 +24,7 @@ import ipaddress
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess  # noqa: S404 - git is invoked with a fixed argument list, never a shell
 import sys
@@ -44,6 +45,8 @@ logger = get_logger("sentinelforge.ingestion.git")
 ALLOWED_SCHEMES: frozenset[str] = frozenset({"https", "http"})
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 MAX_URL_LENGTH = 500
+# How long we are willing to wait for a killed git to let go of its pipes.
+KILL_DRAIN_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -132,7 +135,8 @@ def validate_branch(branch: str | None) -> str | None:
 # certificate store are all reached through libraries that read SystemRoot, and
 # a temporary directory is needed for the objects being fetched. Dropping them
 # makes a clone fail on Windows for reasons that look nothing like the cause.
-WINDOWS_REQUIRED_VARIABLES = ("SystemRoot", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP")
+# os.environ upper-cases its keys on Windows, so these are the real names.
+WINDOWS_REQUIRED_VARIABLES = ("SYSTEMROOT", "COMSPEC", "TEMP", "TMP")
 
 
 def _git_environment() -> dict[str, str]:
@@ -152,8 +156,67 @@ def _git_environment() -> dict[str, str]:
         for name in WINDOWS_REQUIRED_VARIABLES:
             value = os.environ.get(name)
             if value:
-                environment[name] = value
+                # git itself reads the conventional spelling.
+                environment["SystemRoot" if name == "SYSTEMROOT" else name] = value
     return environment
+
+
+def _run_bounded(command: list[str], timeout: int) -> tuple[int, str, str]:
+    """Run ``command`` and guarantee it cannot outlive its timeout.
+
+    ``subprocess.run(timeout=...)`` is not enough on its own. It kills the
+    process it started, but git delegates the network to a *child* of its own
+    (``git-remote-https``), and that grandchild inherits the pipes. Killing the
+    parent leaves the grandchild holding them open, and the call then blocks
+    while collecting output — the timeout expires and the request hangs anyway.
+
+    So the command gets its own process group (its own console group on
+    Windows), and on a timeout the whole group is killed. The drain afterwards
+    is itself bounded, because the point is that nothing here can wait forever.
+    """
+    creation: dict[str, object] = {}
+    if sys.platform == "win32":
+        creation["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        creation["start_new_session"] = True
+
+    process = subprocess.Popen(  # noqa: S603 - fixed argv, shell=False, sanitised env
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=_git_environment(),
+        **creation,  # type: ignore[arg-type]
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(process)
+        try:
+            process.communicate(timeout=KILL_DRAIN_SECONDS)
+        except subprocess.TimeoutExpired:  # pragma: no cover - a pipe still held
+            logger.warning("git_output_not_drained_after_kill")
+        raise
+    return process.returncode, stdout, stderr
+
+
+def _kill_process_tree(process: "subprocess.Popen[str]") -> None:
+    if sys.platform == "win32":
+        # Absolute path, not a PATH lookup: this runs while something has
+        # already gone wrong, which is the worst moment to resolve a name.
+        system_root = os.environ.get("SYSTEMROOT", "C:\\Windows")
+        taskkill = str(Path(system_root) / "System32" / "taskkill.exe")
+        subprocess.run(  # noqa: S603 - absolute path, fixed argv, shell=False
+            [taskkill, "/F", "/T", "/PID", str(process.pid)],
+            capture_output=True,
+            check=False,
+            timeout=KILL_DRAIN_SECONDS,
+        )
+        return
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):  # pragma: no cover - already gone
+        process.kill()
 
 
 def clone_repository(
@@ -190,21 +253,14 @@ def clone_repository(
     command += ["--", url, str(destination)]
 
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False, sanitised env
-            command,
-            capture_output=True,
-            text=True,
-            timeout=settings.CLONE_TIMEOUT_SECONDS,
-            env=_git_environment(),
-            check=False,
-        )
+        returncode, _, stderr = _run_bounded(command, settings.CLONE_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as exc:
         raise CloneFailedError(
             f"The repository took longer than {settings.CLONE_TIMEOUT_SECONDS} seconds to clone"
         ) from exc
 
-    if completed.returncode != 0:
-        raise CloneFailedError(_clone_failure_reason(completed.stderr, branch))
+    if returncode != 0:
+        raise CloneFailedError(_clone_failure_reason(stderr, branch))
 
     return CloneResult(
         commit_hash=_git_output(["rev-parse", "HEAD"], destination, settings) or "",
@@ -237,14 +293,10 @@ def _git_output(arguments: list[str], repository: Path, settings: Settings) -> s
     if executable is None:  # pragma: no cover - git vanished mid-request
         return None
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False
+        returncode, stdout, _ = _run_bounded(
             [executable, "-C", str(repository), *arguments],
-            capture_output=True,
-            text=True,
-            timeout=settings.GIT_COMMAND_TIMEOUT_SECONDS,
-            env=_git_environment(),
-            check=False,
+            settings.GIT_COMMAND_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         return None
-    return completed.stdout.strip() if completed.returncode == 0 else None
+    return stdout.strip() if returncode == 0 else None

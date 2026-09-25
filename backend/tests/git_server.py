@@ -19,6 +19,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+CGI_TIMEOUT_SECONDS = 30
+
 HTTP_BACKEND_CANDIDATES = (
     "/usr/lib/git-core/git-http-backend",
     "/usr/libexec/git-core/git-http-backend",
@@ -31,8 +33,11 @@ def _platform_variables() -> dict[str, str]:
     that read these; without them even a local clone fails."""
     if sys.platform != "win32":
         return {}
-    names = ("SystemRoot", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE")
-    return {name: os.environ[name] for name in names if os.environ.get(name)}
+    names = ("SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE")
+    found = {name: os.environ[name] for name in names if os.environ.get(name)}
+    if "SYSTEMROOT" in found:  # git reads the conventional spelling
+        found["SystemRoot"] = found.pop("SYSTEMROOT")
+    return found
 
 
 GIT_TEST_ENV = {
@@ -52,12 +57,22 @@ GIT_TEST_ENV = {
 
 
 def find_http_backend() -> str | None:
-    """Locate ``git-http-backend``.
+    """Locate ``git-http-backend``, or return ``None`` so the test skips.
 
-    ``git --exec-path`` is the portable answer (it finds the Windows copy under
-    ``Program Files\\Git\\mingw64\\libexec\\git-core`` too); the fixed
-    paths are a fallback for an unusual installation.
+    **Not used on Windows.** Git for Windows does ship the CGI, and pointing
+    this at it makes the real-clone tests *run* there — but the little CGI
+    server below was only ever proven on Linux, and on Windows it hung: the
+    handler thread blocked inside the CGI and `server_close()` waited for it,
+    so the whole suite stopped with no error and no timeout.
+
+    A test that hangs is worse than a test that skips: it stops you finding out
+    anything at all. Until this harness is genuinely verified on Windows, it
+    skips there and the clone paths stay covered by the Linux runs (and, on
+    Windows, by the URL-validation tests, which are the security-critical half).
     """
+    if sys.platform == "win32":
+        return None
+
     git = shutil.which("git")
     if git:
         try:
@@ -113,6 +128,8 @@ class _GitBackendHandler(http.server.BaseHTTPRequestHandler):
     backend: str = ""
 
     protocol_version = "HTTP/1.1"
+    # Never let a slow client hold the handler thread open.
+    timeout = 30
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return  # keep the test output readable
@@ -139,9 +156,22 @@ class _GitBackendHandler(http.server.BaseHTTPRequestHandler):
             "HTTP_GIT_PROTOCOL": self.headers.get("Git-Protocol", ""),
             "HOME": self.project_root,
         }
-        completed = subprocess.run(  # noqa: S603
-            [self.backend], input=body, capture_output=True, env=environment, check=False
-        )
+        try:
+            completed = subprocess.run(  # noqa: S603
+                [self.backend],
+                input=body,
+                capture_output=True,
+                env=environment,
+                check=False,
+                # A CGI that never returns would otherwise block this thread
+                # forever, and with it the end of the test run.
+                timeout=CGI_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:  # pragma: no cover - the CGI misbehaving
+            self.send_response(500)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         raw_headers, _, payload = completed.stdout.partition(b"\r\n\r\n")
         status = 200
         headers: list[tuple[str, str]] = []
@@ -174,6 +204,9 @@ def serve_repository(repository: Path) -> Iterator[str]:
         {"project_root": str(repository.parent), "backend": backend},
     )
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    # Daemon handler threads: `server_close()` joins non-daemon ones, so a
+    # single stuck request would hang the whole test run instead of failing it.
+    server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

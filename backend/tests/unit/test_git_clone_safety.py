@@ -278,6 +278,60 @@ def test_a_server_that_never_answers_is_cut_off(tmp_path: Path, settings: Settin
         assert "longer than 5 seconds" in error.value.message
 
 
+def test_a_timed_out_clone_leaves_no_git_process_behind(tmp_path: Path, settings: Settings) -> None:
+    """Killing git is not enough: its network child holds the pipes.
+
+    ``git clone`` delegates the transfer to ``git-remote-https``. Killing only
+    the process we started leaves that child alive holding stdout and stderr,
+    and collecting the output then blocks — the timeout fires and the request
+    hangs anyway. The whole process group has to go.
+    """
+    if not git_is_available():
+        pytest.skip("git is not installed")
+
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(8)
+    port = listener.getsockname()[1]
+    held = []
+
+    def accept_and_stall() -> None:
+        while True:
+            try:
+                held.append(listener.accept()[0])
+            except OSError:
+                return
+
+    threading.Thread(target=accept_and_stall, daemon=True).start()
+
+    impatient = local_settings(
+        settings,
+        ALLOW_INSECURE_GIT_URLS=True,
+        ALLOW_PRIVATE_GIT_HOSTS=True,
+        CLONE_TIMEOUT_SECONDS=5,
+    )
+    started = time.monotonic()
+    try:
+        with pytest.raises(CloneFailedError):
+            clone_repository(
+                url=f"http://127.0.0.1:{port}/stalled.git",
+                branch=None,
+                destination=tmp_path / "stalled",
+                settings=impatient,
+            )
+    finally:
+        listener.close()
+        for connection in held:
+            connection.close()
+
+    elapsed = time.monotonic() - started
+    # Without the process-group kill this returns only when the transfer child
+    # gives up on its own, which is minutes rather than seconds.
+    assert elapsed < impatient.CLONE_TIMEOUT_SECONDS + 10, (
+        f"the clone took {elapsed:.0f}s to give up"
+    )
+
+
 def test_a_symlink_in_the_repository_arrives_as_a_plain_file(
     tmp_path: Path, settings: Settings
 ) -> None:
