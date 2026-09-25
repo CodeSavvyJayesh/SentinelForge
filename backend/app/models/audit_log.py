@@ -24,6 +24,9 @@ class AuditAction(StrEnum):
     TOKEN_REFRESHED = "auth.token_refreshed"  # noqa: S105 - an event name, not a secret
     REFRESH_REUSE_DETECTED = "auth.refresh_reuse_detected"
     LOGOUT = "auth.logout"
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
+    PROJECT_DELETED = "project.deleted"
 
 
 class AuditLog(Base):

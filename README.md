@@ -2,7 +2,7 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 2 — Authentication** complete (foundation, accounts, sessions, roles).
+> Status: **Phase 3 — Projects** complete (foundation, accounts, sessions, roles, projects).
 > Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
 > planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
@@ -36,15 +36,16 @@ flowchart TD
 Design: a **modular monolith** (one FastAPI service with clearly separated modules), built
 phase by phase. Details: [docs/architecture/overview.md](docs/architecture/overview.md).
 
-## What works today (Phases 1–2)
+## What works today (Phases 1–3)
 
 | Area | Implemented |
 | --- | --- |
 | Backend | FastAPI app factory, typed settings, structured JSON logging, request IDs, standard error envelope, CORS, security headers |
 | Health | `GET /api/v1/health/live` (process) and `GET /api/v1/health` (PostgreSQL check, 503 when down) |
 | Auth | Register / login / refresh / logout / me, scrypt password hashing, JWT access tokens, rotating httpOnly refresh cookies with reuse detection, CSRF protection, per-IP rate limiting, USER/ADMIN roles, audit log |
-| Database | PostgreSQL, SQLAlchemy 2.x, Alembic migrations: `users`, `refresh_sessions`, `audit_logs` |
-| Frontend | React 19 + TypeScript, typed API client, sign-in / sign-up, session restore after reload, admin account list, live **System status** page |
+| Projects | Create / list / search / update / delete your own projects; another user's project is invisible, not merely forbidden |
+| Database | PostgreSQL, SQLAlchemy 2.x, Alembic migrations: `users`, `refresh_sessions`, `audit_logs`, `projects` |
+| Frontend | React 19 + TypeScript + React Router, sign-in / sign-up, session restore after reload, project list / create / detail / delete, admin account list, live **System status** page |
 | Quality | 82 backend tests (pytest, incl. PostgreSQL integration), 29 frontend unit tests (Vitest), Ruff, ESLint |
 
 Security design and its trade-offs: [docs/security/authentication.md](docs/security/authentication.md).
@@ -151,7 +152,7 @@ SentinelForge/
 | --- | --- | --- |
 | 1 | Foundation | ✅ Done |
 | 2 | Authentication (JWT, roles) | ✅ Done |
-| 3 | Projects & ownership | Planned |
+| 3 | Projects & ownership | ✅ Done |
 | 4 | Repository ingestion & language detection | Planned |
 | 5 | Analysis engine (rules, AST, static analyzer adapters) | Planned |
 | 6 | Scan orchestration & background jobs | Planned |
@@ -177,3 +178,4 @@ SentinelForge/
 - [Security: authentication model](docs/security/authentication.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
+- [Phase 3 report](docs/development/phases/phase-03-projects.md)

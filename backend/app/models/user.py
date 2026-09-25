@@ -44,6 +44,11 @@ class User(TimestampMixin, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    projects: Mapped[list["Project"]] = relationship(  # noqa: F821
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     @property
     def is_admin(self) -> bool:

@@ -99,7 +99,8 @@ components (presentational only)
 | PostgreSQL + Alembic, `users` table | Implemented (Phase 1) |
 | React + TS shell, system status page | Implemented (Phase 1) |
 | Authentication, sessions, roles, audit log | Implemented (Phase 2) — see [security/authentication.md](../security/authentication.md) |
-| Projects, repositories, ingestion | Phases 3–4 |
+| Projects with per-user ownership | Implemented (Phase 3) |
+| Repositories, ingestion | Phase 4 |
 | Analysis engine, scan orchestration | Phases 5–6 |
 | RAG, Ollama LLM, risk engine | Phases 7–9 |
 | Patch generation & validation | Phases 10–11 |

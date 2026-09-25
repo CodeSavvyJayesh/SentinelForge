@@ -116,6 +116,24 @@ Missing or mismatched → `403 CSRF_TOKEN_INVALID`.
 
 Full design and trade-offs: [security/authentication.md](../security/authentication.md).
 
+## Projects
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/projects` | Bearer | 201; name unique per owner |
+| `GET /api/v1/projects` | Bearer | your projects only; `search`, `limit`, `offset` |
+| `GET /api/v1/projects/{id}` | Bearer | 404 if missing **or owned by someone else** |
+| `PATCH /api/v1/projects/{id}` | Bearer | partial update |
+| `DELETE /api/v1/projects/{id}` | Bearer | 204 |
+
+Ownership is taken from the access token. `owner_id` in a request body is
+ignored, and a project belonging to another user is indistinguishable from one
+that does not exist: same status, same message. Returning `403` there would
+confirm the id exists and let someone map the database by walking ids.
+
+Codes: `PROJECT_NOT_FOUND` (404), `PROJECT_NAME_TAKEN` (409),
+`PROJECT_LIMIT_REACHED` (409).
+
 ## CORS
 
 Only origins listed in `CORS_ALLOWED_ORIGINS` (comma-separated, no `*`) may call the API from a
