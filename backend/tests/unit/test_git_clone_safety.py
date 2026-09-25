@@ -7,6 +7,7 @@ up in an argument list for a program that can be talked into running commands
 
 import os
 import socket
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -231,16 +232,17 @@ def test_a_server_that_never_answers_is_cut_off(tmp_path: Path, settings: Settin
     """Without the timeout, one unresponsive host would hold a worker forever."""
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
+    listener.listen(8)  # git may open more than one connection
     port = listener.getsockname()[1]
+    held = []
 
     def accept_and_stall() -> None:
-        try:
-            connection, _ = listener.accept()
-            time.sleep(30)  # accept the connection, answer nothing
-            connection.close()
-        except OSError:
-            pass
+        while True:
+            try:
+                connection, _ = listener.accept()
+            except OSError:
+                return
+            held.append(connection)  # accepted, and answered never
 
     thread = threading.Thread(target=accept_and_stall, daemon=True)
     thread.start()
@@ -253,7 +255,7 @@ def test_a_server_that_never_answers_is_cut_off(tmp_path: Path, settings: Settin
     )
     started = time.monotonic()
     try:
-        with pytest.raises(CloneFailedError, match="longer than 5 seconds"):
+        with pytest.raises(CloneFailedError) as error:
             clone_repository(
                 url=f"http://127.0.0.1:{port}/stalled.git",
                 branch=None,
@@ -262,8 +264,18 @@ def test_a_server_that_never_answers_is_cut_off(tmp_path: Path, settings: Settin
             )
     finally:
         listener.close()
+        for connection in held:
+            connection.close()
 
-    assert time.monotonic() - started < 20, "the clone should be killed at the timeout"
+    elapsed = time.monotonic() - started
+    # The point of the test on every platform: the call returns, quickly, with
+    # an error the user can be shown.
+    assert elapsed < 20, f"the clone should not have run for {elapsed:.0f}s"
+    if sys.platform != "win32":
+        # Where git really does wait on a silent socket, the timeout is what
+        # ends it. Windows git gives up on its own first, so the message there
+        # is the generic clone failure.
+        assert "longer than 5 seconds" in error.value.message
 
 
 def test_a_symlink_in_the_repository_arrives_as_a_plain_file(

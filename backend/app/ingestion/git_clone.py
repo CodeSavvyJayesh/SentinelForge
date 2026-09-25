@@ -26,6 +26,7 @@ import re
 import shutil
 import socket
 import subprocess  # noqa: S404 - git is invoked with a fixed argument list, never a shell
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -127,9 +128,16 @@ def validate_branch(branch: str | None) -> str | None:
     return candidate
 
 
+# Windows needs these even for a plain network call: sockets, DNS and the
+# certificate store are all reached through libraries that read SystemRoot, and
+# a temporary directory is needed for the objects being fetched. Dropping them
+# makes a clone fail on Windows for reasons that look nothing like the cause.
+WINDOWS_REQUIRED_VARIABLES = ("SystemRoot", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP")
+
+
 def _git_environment() -> dict[str, str]:
     """A minimal environment: no user config, no prompts, no credential helpers."""
-    return {
+    environment = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "GIT_TERMINAL_PROMPT": "0",  # fail instead of asking for a password
         "GIT_ASKPASS": "",
@@ -140,6 +148,12 @@ def _git_environment() -> dict[str, str]:
         "GIT_ALLOW_PROTOCOL": "https:http",
         "LC_ALL": "C",
     }
+    if sys.platform == "win32":
+        for name in WINDOWS_REQUIRED_VARIABLES:
+            value = os.environ.get(name)
+            if value:
+                environment[name] = value
+    return environment
 
 
 def clone_repository(

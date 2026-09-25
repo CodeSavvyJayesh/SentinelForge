@@ -13,6 +13,7 @@ import http.server
 import os
 import shutil
 import subprocess  # noqa: S404 - test helper running git's own CGI
+import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -23,6 +24,16 @@ HTTP_BACKEND_CANDIDATES = (
     "/usr/libexec/git-core/git-http-backend",
     "/usr/local/libexec/git-core/git-http-backend",
 )
+
+
+def _platform_variables() -> dict[str, str]:
+    """Windows reaches sockets, DNS and its certificate store through libraries
+    that read these; without them even a local clone fails."""
+    if sys.platform != "win32":
+        return {}
+    names = ("SystemRoot", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE")
+    return {name: os.environ[name] for name in names if os.environ.get(name)}
+
 
 GIT_TEST_ENV = {
     "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -36,13 +47,33 @@ GIT_TEST_ENV = {
     "GIT_AUTHOR_DATE": "2026-01-01T00:00:00+00:00",
     "GIT_COMMITTER_DATE": "2026-01-01T00:00:00+00:00",
     "LC_ALL": "C",
+    **_platform_variables(),
 }
 
 
 def find_http_backend() -> str | None:
-    for candidate in HTTP_BACKEND_CANDIDATES:
-        if Path(candidate).exists():
-            return candidate
+    """Locate ``git-http-backend``.
+
+    ``git --exec-path`` is the portable answer (it finds the Windows copy under
+    ``Program Files\\Git\\mingw64\\libexec\\git-core`` too); the fixed
+    paths are a fallback for an unusual installation.
+    """
+    git = shutil.which("git")
+    if git:
+        try:
+            exec_path = subprocess.run(  # noqa: S603
+                [git, "--exec-path"], capture_output=True, text=True, timeout=10, check=False
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):  # pragma: no cover
+            exec_path = ""
+        if exec_path:
+            for name in ("git-http-backend", "git-http-backend.exe"):
+                candidate = Path(exec_path) / name
+                if candidate.exists():
+                    return str(candidate)
+    for candidate_path in HTTP_BACKEND_CANDIDATES:
+        if Path(candidate_path).exists():
+            return candidate_path
     return None
 
 

@@ -152,11 +152,17 @@ def test_symlinks_are_not_counted_or_followed(tmp_path: Path) -> None:
     the totals, and a later phase would happily read and analyse them.
     """
     (tmp_path / "app.py").write_text("print(1)\n")
-    os.symlink("/etc/passwd", tmp_path / "passwd.py")  # a link to a FILE
-    os.symlink("/etc", tmp_path / "escape")  # and one to a DIRECTORY
+    target = tmp_path / "target.txt"
+    target.write_text("secret\n" * 100)
+    try:
+        os.symlink(target, tmp_path / "passwd.py")  # a link to a FILE
+        os.symlink(tmp_path / "sub", tmp_path / "escape")  # and one to a DIRECTORY
+    except (OSError, NotImplementedError):  # pragma: no cover - Windows
+        pytest.skip("creating a symlink needs a privilege this account does not have")
 
     summary = summarise_tree(tmp_path)
 
-    assert summary.file_count == 1, "only the real file is counted"
-    assert summary.total_bytes == (tmp_path / "app.py").stat().st_size
+    # app.py and target.txt are real files; the two links are not counted.
+    assert summary.file_count == 2, "links are not files in this repository"
+    assert summary.total_bytes == (tmp_path / "app.py").stat().st_size + target.stat().st_size
     assert summary.primary_language == "Python"

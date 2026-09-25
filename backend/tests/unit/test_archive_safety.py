@@ -4,6 +4,7 @@ Each test here is a real technique, not a hypothetical: zip slip (CVE-2018-10022
 and dozens like it), symlink escape, zip bombs, and lying headers.
 """
 
+import sys
 import zipfile
 from pathlib import Path
 
@@ -248,7 +249,13 @@ def test_a_normal_archive_extracts_with_plain_permissions(
     assert result.file_count == 2
     assert (destination / "app/main.py").read_text() == "print('hi')\n"
     mode = (destination / "run.sh").stat().st_mode & 0o777
-    assert mode == 0o644, "extracted files must never keep an execute bit"
+    # The rule everywhere: no execute bit survives extraction.
+    assert mode & 0o111 == 0, "extracted files must never keep an execute bit"
+    if sys.platform != "win32":
+        # Windows has no POSIX mode - chmod only toggles the read-only flag and
+        # stat() reports 0o666 for any writable file - so the exact mode is
+        # only meaningful where the filesystem actually stores one.
+        assert mode == 0o644
 
 
 def test_re_extracting_over_an_executable_file_resets_its_permissions(
@@ -269,8 +276,10 @@ def test_re_extracting_over_an_executable_file_resets_its_permissions(
 
     extract_archive(archive, destination, settings)
 
-    assert stale.stat().st_mode & 0o777 == 0o644
-    assert stale.stat().st_mode & 0o111 == 0, "no extracted file may be executable"
+    mode = stale.stat().st_mode & 0o777
+    assert mode & 0o111 == 0, "no extracted file may be executable"
+    if sys.platform != "win32":  # see the note above about Windows modes
+        assert mode == 0o644
 
 
 def test_a_corrupt_file_is_a_clean_error(tmp_path: Path, settings: Settings) -> None:
