@@ -129,8 +129,8 @@ button is convenience; the server-side check is the security.
 | `pytest` — 107 tests (24 new) against real PostgreSQL | ✅ pass |
 | `ruff check` / `ruff format --check` | ✅ pass |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | ✅ pass |
-| Frontend type-check, ESLint (your exact config), Vitest | see section 9 |
-| Browser run with **two separate accounts** | see section 9 |
+| Frontend type-check (strict), ESLint with your exact config, 37 Vitest tests | ✅ pass |
+| Browser run with **two separate accounts** | ✅ see below |
 
 ### Do the isolation tests bite?
 
@@ -146,6 +146,32 @@ restored:
 
 A security test that passes with the protection removed is decoration. These
 do not.
+
+### The browser run (two accounts, separate cookie jars)
+
+| Step | Result |
+| --- | --- |
+| Alice signs up, sees the real empty state | ✅ "No projects yet — create your first one" |
+| Alice creates "SecureBank" with a repository URL | ✅ lands on the detail page |
+| Alice creates "SecureBank" again | ✅ "You already have a project with this name" |
+| Alice edits the description | ✅ saved and shown |
+| Bob signs up in a separate browser context | ✅ his list is empty |
+| **Bob types Alice's project id into the URL** | ✅ "Project not found — This project does not exist, or it is not yours"; the name "SecureBank" appears nowhere in the response |
+| Bob's navigation | ✅ no Accounts link (he is not an admin) |
+| Delete with the wrong name typed | ✅ button stays disabled |
+| Delete with the right name | ✅ project gone, list empty again |
+| JavaScript console | ✅ no errors |
+
+Two visual bugs were found this way and fixed: a long repository URL overflowed
+into the next column, and the brand in the top bar was underlined as a link.
+
+### One deployment note found while testing
+
+Serving the built frontend needs **history fallback** — any unknown path must
+return `index.html`, or a page reload on `/projects/5` gives a 404 from the web
+server (not from the app). `npm run dev` and `vite preview` do this already;
+a production host must be configured for it. It is recorded here because it
+will bite exactly once, at deployment, and look like a broken app.
 
 ---
 
