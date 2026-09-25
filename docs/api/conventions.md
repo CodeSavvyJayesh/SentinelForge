@@ -168,6 +168,36 @@ A rejected upload or clone still leaves a row with `status: "FAILED"` and a
 safe `error_message`, so the attempt is visible instead of silently vanishing.
 The workspace is deleted in that case.
 
+## Analysis and findings
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/repositories/{id}/analyze` | Bearer | runs the analysers over the ingested code; replaces the previous findings |
+| `GET /api/v1/repositories/{id}/findings` | Bearer | `severity`, `limit`, `offset` |
+| `GET /api/v1/findings/{id}` | Bearer | one finding |
+
+The analyse response is a summary, not the findings themselves:
+
+```json
+{"repository_id": 5, "findings": 6, "by_severity": {"CRITICAL": 1, "HIGH": 3, "MEDIUM": 2},
+ "files_scanned": 3, "files_skipped": 0, "unparsable_files": 0,
+ "truncated": false, "duration_ms": 41, "analyzed_at": "2026-09-25T12:01:04Z"}
+```
+
+`truncated: true` means the finding cap was reached and the list is partial —
+the API says so rather than presenting a capped list as complete. `by_severity`
+in the findings list counts the **whole repository**, so a severity filter
+cannot make the totals shown beside it lie.
+
+Codes: `REPOSITORY_NOT_ANALYSABLE` (409 — the repository failed to ingest, or
+its stored copy is gone; deliberately not "0 findings", which would read as
+"clean"), `FINDING_NOT_FOUND` (404), `REPOSITORY_NOT_FOUND` (404 for someone
+else's repository, exactly as in Phase 4).
+
+Findings carry `severity` **and** `confidence`: how bad it would be, and how
+sure the analyser is. `snippet` is code from the analysed repository with any
+credential already redacted server-side; clients render it as text.
+
 ## CORS
 
 Only origins listed in `CORS_ALLOWED_ORIGINS` (comma-separated, no `*`) may call the API from a

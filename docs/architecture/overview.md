@@ -108,6 +108,23 @@ upload / git URL  →  limits + validation  →  isolated workspace  →  file s
 - Limits (size, expansion ratio, file count, per-file size, clone timeout) are
   settings, so a deployment can tighten them without a code change.
 
+## Analysis
+
+```
+workspace  →  per-file analyser choice  →  findings  →  collapse + number  →  findings table
+              (python_ast / patterns / secrets)          (one issue per place)
+```
+
+- Python is parsed (`ast.parse`); other languages are matched as text with
+  comment stripping and shape requirements. Nothing is executed, ever.
+- Rules live in one catalogue (`app/analysis/rules.py`) carrying severity,
+  confidence, CWE and OWASP category, so analysers only decide *whether* a rule
+  matched.
+- A credential finding is redacted at the point of creation, before it can
+  reach the database, the API or a report.
+- The `Finding` shape is normalised so a third-party scanner (Semgrep, Bandit)
+  can be added later as just another analyser.
+
 ## Current vs planned components
 
 | Component | Status |
@@ -118,7 +135,8 @@ upload / git URL  →  limits + validation  →  isolated workspace  →  file s
 | Authentication, sessions, roles, audit log | Implemented (Phase 2) — see [security/authentication.md](../security/authentication.md) |
 | Projects with per-user ownership | Implemented (Phase 3) |
 | Repositories, ingestion (zip upload, git clone, language detection) | Implemented (Phase 4) — see [security/ingestion.md](../security/ingestion.md) |
-| Analysis engine, scan orchestration | Phases 5–6 |
+| Static analysis engine (AST + patterns + secrets) | Implemented (Phase 5) — see [security/analysis.md](../security/analysis.md) |
+| Scan orchestration, background jobs | Phase 6 |
 | RAG, Ollama LLM, risk engine | Phases 7–9 |
 | Patch generation & validation | Phases 10–11 |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |

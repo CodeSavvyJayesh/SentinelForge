@@ -2,7 +2,7 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 4 — Repository ingestion** complete (foundation, accounts, sessions, roles, projects, code ingestion).
+> Status: **Phase 5 — Static analysis** complete (foundation, accounts, projects, code ingestion, vulnerability detection).
 > Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
 > planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
@@ -154,7 +154,7 @@ SentinelForge/
 | 2 | Authentication (JWT, roles) | ✅ Done |
 | 3 | Projects & ownership | ✅ Done |
 | 4 | Repository ingestion & language detection | ✅ Done |
-| 5 | Analysis engine (rules, AST, static analyzer adapters) | Planned |
+| 5 | Analysis engine (AST rules, patterns, secret detection) | ✅ Done |
 | 6 | Scan orchestration & background jobs | Planned |
 | 7 | RAG (security knowledge) | Planned |
 | 8 | Local LLM (Ollama) analysis & explanation | Planned |
@@ -165,8 +165,10 @@ SentinelForge/
 
 ## Limitations (current)
 
-- No vulnerability analysis exists yet: code can be ingested and summarised, but scanning starts in Phase 6.
-- Ingestion is synchronous, so a very large repository ties up a request until the limits or the clone timeout stop it.
+- Analysis is rule-based and local: there is no data-flow (taint) tracking yet, so a finding says "this call is dangerous", not "user input reaches it".
+- "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
+- Analysis runs on request and synchronously; scheduled and background scans arrive in Phase 6.
+- Ingestion and analysis are synchronous, so a very large repository ties up a request until the limits stop it.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
 - Rate-limit counters live in one process (Redis planned when workers multiply).
@@ -179,7 +181,9 @@ SentinelForge/
 - [Development setup](docs/development/setup.md)
 - [Security: authentication model](docs/security/authentication.md)
 - [Security: ingesting untrusted code](docs/security/ingestion.md)
+- [Security: analysing untrusted code](docs/security/analysis.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
 - [Phase 4 report](docs/development/phases/phase-04-ingestion.md)
+- [Phase 5 report](docs/development/phases/phase-05-analysis.md)

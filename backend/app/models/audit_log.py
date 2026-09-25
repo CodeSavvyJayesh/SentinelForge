@@ -30,6 +30,7 @@ class AuditAction(StrEnum):
     REPOSITORY_CONNECTED = "repository.connected"
     REPOSITORY_INGEST_FAILED = "repository.ingest_failed"
     REPOSITORY_DELETED = "repository.deleted"
+    REPOSITORY_ANALYZED = "repository.analyzed"
 
 
 class AuditLog(Base):

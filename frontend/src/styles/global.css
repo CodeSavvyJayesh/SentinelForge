@@ -884,6 +884,201 @@ a.button {
   color: var(--color-text-muted);
 }
 
+/* ---------- Findings (Phase 5) ---------- */
+
+.findings {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.findings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.findings__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.findings__meta,
+.findings__summary,
+.findings__count {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.severity-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.chip {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.chip:hover:not(.chip--active) {
+  border-color: var(--color-text-muted);
+}
+
+.chip--active {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.finding-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.finding {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.finding--critical {
+  border-left-color: var(--severity-critical);
+}
+
+.finding--high {
+  border-left-color: var(--severity-high);
+}
+
+.finding--medium {
+  border-left-color: var(--severity-medium);
+}
+
+.finding--low,
+.finding--info {
+  border-left-color: var(--color-text-muted);
+}
+
+.finding__summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.finding__summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.finding__title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.finding__location {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+/* Severity is carried by the label text as well as the colour, never colour
+   alone - the same rule as the status badges in Phase 1. */
+.severity-tag {
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+}
+
+.severity-tag--critical,
+.chip--critical.chip--active {
+  color: var(--severity-critical);
+}
+
+.severity-tag--high,
+.chip--high.chip--active {
+  color: var(--severity-high);
+}
+
+.severity-tag--medium,
+.chip--medium.chip--active {
+  color: var(--severity-medium);
+}
+
+.severity-tag--low,
+.severity-tag--info {
+  color: var(--color-text-muted);
+}
+
+.finding__details {
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.finding__message {
+  margin: var(--space-3) 0;
+}
+
+.finding__snippet {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-size: 0.8125rem;
+}
+
+.finding__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: var(--space-3) 0 0;
+}
+
+.finding__facts dt {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.finding__facts dd {
+  margin: 2px 0 0;
+}
+
 @media (max-width: 720px) {
   .toolbar,
   .form-actions {

@@ -73,8 +73,14 @@ class Repository(TimestampMixin, Base):
     # Set only when status is FAILED; safe to show to the owner.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the static analysis (Phase 5) last ran. NULL means never analysed,
+    # which is different from "analysed and clean" - the UI says which.
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="repositories")  # noqa: F821
+    findings: Mapped[list["Finding"]] = relationship(  # noqa: F821
+        back_populates="repository", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     def __repr__(self) -> str:
         return f"Repository(id={self.id!r}, project_id={self.project_id!r}, source={self.source!r})"
