@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     ALLOW_INSECURE_GIT_URLS: bool = False
     ALLOW_PRIVATE_GIT_HOSTS: bool = False
 
+    # --- Static analysis (Phase 5) -----------------------------------------
+    # A file larger than this is not source code worth parsing (generated
+    # bundles, vendored blobs); analysing it costs time and finds nothing.
+    ANALYSIS_MAX_FILE_BYTES: int = Field(default=1024 * 1024, ge=1024)  # 1 MB
+    # A repository that produces more findings than this has a systemic problem
+    # that a longer list will not help with; the result says it was truncated.
+    ANALYSIS_MAX_FINDINGS: int = Field(default=2000, ge=1)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

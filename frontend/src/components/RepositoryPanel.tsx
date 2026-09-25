@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
 import { EmptyState } from './EmptyState'
+import { FindingsPanel } from './FindingsPanel'
 import { ErrorState } from './ErrorState'
 import { FormField } from './FormField'
 import { LoadingState } from './LoadingState'
@@ -288,6 +289,9 @@ function RepositoryCard({
 }) {
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // Kept locally so the panel flips from "never analysed" to "last analysed"
+  // without re-fetching the whole repository list.
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(repository.analyzed_at)
   const shares = toLanguageShares(repository.language_breakdown)
 
   async function handleDelete() {
@@ -376,6 +380,14 @@ function RepositoryCard({
             </>
           )}
         </>
+      )}
+
+      {repository.status === 'READY' && (
+        <FindingsPanel
+          repositoryId={repository.id}
+          analyzedAt={analyzedAt}
+          onAnalyzed={(summary) => setAnalyzedAt(summary.analyzed_at)}
+        />
       )}
 
       {error && (

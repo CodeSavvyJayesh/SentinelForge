@@ -18,6 +18,8 @@ export interface Repository {
   language_breakdown: Record<string, number> | null
   error_message: string | null
   ingested_at: string | null
+  /** When static analysis last ran; null means never. */
+  analyzed_at: string | null
   created_at: string
   updated_at: string
 }

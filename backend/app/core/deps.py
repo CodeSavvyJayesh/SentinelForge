@@ -21,6 +21,7 @@ from app.core.security import (
 )
 from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
+from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
@@ -76,6 +77,13 @@ def get_repository_service(db: DbSession, settings: AppSettings) -> RepositorySe
 
 
 RepositoryServiceDep = Annotated[RepositoryService, Depends(get_repository_service)]
+
+
+def get_analysis_service(db: DbSession, settings: AppSettings) -> AnalysisService:
+    return AnalysisService(db, settings)
+
+
+AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 
 
 def get_current_user(

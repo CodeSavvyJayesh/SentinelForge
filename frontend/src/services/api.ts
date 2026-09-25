@@ -1,4 +1,5 @@
 import { appConfig } from '../config/env'
+import { createAnalysisService } from './analysisService'
 import { createApiClient } from './apiClient'
 import { createAuthService } from './authService'
 import { createHealthService } from './healthService'
@@ -33,3 +34,4 @@ export const healthService = createHealthService(apiClient)
 export const userService = createUserService(apiClient)
 export const projectService = createProjectService(apiClient)
 export const repositoryService = createRepositoryService(apiClient)
+export const analysisService = createAnalysisService(apiClient)

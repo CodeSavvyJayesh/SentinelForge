@@ -134,10 +134,10 @@ function ProjectView({
       <RepositoryPanel projectId={project.id} defaultBranch={project.default_branch} />
 
       <div className="panel panel--planned">
-        <h2 className="panel__title">Scans</h2>
+        <h2 className="panel__title">Scan history</h2>
         <p>
-          Scanning arrives in Phase 6. Connected code is stored and summarised now; nothing is
-          analysed or simulated yet.
+          Each repository above can be analysed now, and shows its current findings. Scheduled and
+          background scans, with a history you can compare over time, arrive in Phase 6.
         </p>
       </div>
 
