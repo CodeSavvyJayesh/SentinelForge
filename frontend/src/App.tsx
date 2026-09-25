@@ -49,6 +49,10 @@ function AuthenticatedApp() {
     <AppLayout>
       <Routes>
         <Route path="/" element={<Navigate to="/projects" replace />} />
+        {/* Signing in from /login or /register leaves that path in the address
+            bar; without these the user would land on "Page not found". */}
+        <Route path="/login" element={<Navigate to="/projects" replace />} />
+        <Route path="/register" element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/new" element={<ProjectCreatePage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />

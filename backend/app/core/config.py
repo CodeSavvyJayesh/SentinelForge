@@ -77,6 +77,29 @@ class Settings(BaseSettings):
     AUTH_RATE_LIMIT_ATTEMPTS: int = Field(default=10, ge=1)
     AUTH_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=300, ge=1)
 
+    # --- Repository ingestion ----------------------------------------------
+    # Where uploaded and cloned code is stored. One directory per repository;
+    # nothing is ever written outside this root.
+    WORKSPACE_ROOT: str = str(BACKEND_DIR / "workspaces")
+
+    # Upload limits. MAX_ARCHIVE_BYTES caps the compressed upload;
+    # MAX_UNCOMPRESSED_BYTES and MAX_COMPRESSION_RATIO together stop zip bombs.
+    MAX_ARCHIVE_BYTES: int = Field(default=100 * 1024 * 1024, ge=1024)  # 100 MB
+    MAX_UNCOMPRESSED_BYTES: int = Field(default=500 * 1024 * 1024, ge=1024)  # 500 MB
+    MAX_COMPRESSION_RATIO: int = Field(default=100, ge=2)
+    MAX_FILES: int = Field(default=20_000, ge=1)
+    MAX_FILE_BYTES: int = Field(default=5 * 1024 * 1024, ge=1024)  # 5 MB per file
+    MAX_REPOSITORIES_PER_PROJECT: int = Field(default=20, ge=1)
+
+    # Git cloning.
+    CLONE_TIMEOUT_SECONDS: int = Field(default=120, ge=5, le=900)
+    GIT_COMMAND_TIMEOUT_SECONDS: int = Field(default=15, ge=1, le=120)
+    # Both default to false: http:// clone URLs and hosts that resolve to a
+    # private address are refused unless a deployment deliberately opts in
+    # (an internal Git server on a trusted network).
+    ALLOW_INSECURE_GIT_URLS: bool = False
+    ALLOW_PRIVATE_GIT_HOSTS: bool = False
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"
@@ -112,6 +135,8 @@ class Settings(BaseSettings):
             raise ValueError("COOKIE_SECURE must be true in production")
         if self.is_production and self.DEBUG:
             raise ValueError("DEBUG must be false in production")
+        if self.MAX_FILE_BYTES > self.MAX_UNCOMPRESSED_BYTES:
+            raise ValueError("MAX_FILE_BYTES cannot exceed MAX_UNCOMPRESSED_BYTES")
         return self
 
     @property

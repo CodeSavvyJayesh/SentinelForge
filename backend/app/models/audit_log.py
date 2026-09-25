@@ -27,6 +27,9 @@ class AuditAction(StrEnum):
     PROJECT_CREATED = "project.created"
     PROJECT_UPDATED = "project.updated"
     PROJECT_DELETED = "project.deleted"
+    REPOSITORY_CONNECTED = "repository.connected"
+    REPOSITORY_INGEST_FAILED = "repository.ingest_failed"
+    REPOSITORY_DELETED = "repository.deleted"
 
 
 class AuditLog(Base):

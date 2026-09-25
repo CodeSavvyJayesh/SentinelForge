@@ -6,6 +6,8 @@ sqlalchemy==2.0.52
 alembic==1.19.1
 psycopg[binary]==3.3.4
 pyjwt==2.12.1
+# Multipart form parsing: required by FastAPI for file uploads (Phase 4).
+python-multipart==0.0.26
 pydantic==2.13.4
 pydantic-settings==2.15.0
 python-dotenv==1.2.2

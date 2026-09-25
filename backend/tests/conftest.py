@@ -7,6 +7,8 @@ tests are skipped and everything else still runs.
 """
 
 import os
+import shutil
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -41,6 +43,18 @@ os.environ.setdefault("SCRYPT_P", "1")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-that-is-long-enough-32+")
 os.environ.setdefault("AUTH_RATE_LIMIT_ATTEMPTS", "5")
 os.environ["DB_CONNECT_TIMEOUT_SECONDS"] = "2"
+
+# Ingestion (Phase 4). Workspaces go to a throwaway directory so a test can
+# never write into the repository, and the limits are small so that "too big"
+# and "too many" can be proven with kilobytes instead of gigabytes.
+_TEST_WORKSPACE_ROOT = Path(tempfile.mkdtemp(prefix="sentinelforge-test-workspaces-"))
+os.environ["WORKSPACE_ROOT"] = str(_TEST_WORKSPACE_ROOT)
+os.environ.setdefault("MAX_ARCHIVE_BYTES", str(1024 * 1024))  # 1 MB
+os.environ.setdefault("MAX_UNCOMPRESSED_BYTES", str(4 * 1024 * 1024))  # 4 MB
+os.environ.setdefault("MAX_FILE_BYTES", str(200 * 1024))  # 200 KB
+os.environ.setdefault("MAX_FILES", "50")
+os.environ.setdefault("MAX_REPOSITORIES_PER_PROJECT", "3")
+os.environ.setdefault("CLONE_TIMEOUT_SECONDS", "30")
 os.environ["LOG_FORMAT"] = "text"
 os.environ["ENABLE_API_DOCS"] = "true"
 
@@ -50,6 +64,19 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app.core.database import engine  # noqa: E402
 from app.main import create_app  # noqa: E402
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _clean_workspace_root() -> Iterator[None]:
+    """Remove every workspace this test run created."""
+    yield
+    shutil.rmtree(_TEST_WORKSPACE_ROOT, ignore_errors=True)
+
+
+@pytest.fixture
+def workspace_root() -> Path:
+    """Where ingested code lands during tests."""
+    return _TEST_WORKSPACE_ROOT
 
 
 @pytest.fixture(autouse=True)

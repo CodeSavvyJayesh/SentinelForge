@@ -2,7 +2,7 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 3 — Projects** complete (foundation, accounts, sessions, roles, projects).
+> Status: **Phase 4 — Repository ingestion** complete (foundation, accounts, sessions, roles, projects, code ingestion).
 > Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
 > planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
@@ -153,7 +153,7 @@ SentinelForge/
 | 1 | Foundation | ✅ Done |
 | 2 | Authentication (JWT, roles) | ✅ Done |
 | 3 | Projects & ownership | ✅ Done |
-| 4 | Repository ingestion & language detection | Planned |
+| 4 | Repository ingestion & language detection | ✅ Done |
 | 5 | Analysis engine (rules, AST, static analyzer adapters) | Planned |
 | 6 | Scan orchestration & background jobs | Planned |
 | 7 | RAG (security knowledge) | Planned |
@@ -165,7 +165,9 @@ SentinelForge/
 
 ## Limitations (current)
 
-- No vulnerability analysis exists yet — Phases 1–2 are infrastructure and accounts.
+- No vulnerability analysis exists yet: code can be ingested and summarised, but scanning starts in Phase 6.
+- Ingestion is synchronous, so a very large repository ties up a request until the limits or the clone timeout stop it.
+- Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
 - Rate-limit counters live in one process (Redis planned when workers multiply).
 - No Docker setup yet (planned once more services exist).
@@ -176,6 +178,8 @@ SentinelForge/
 - [API conventions](docs/api/conventions.md)
 - [Development setup](docs/development/setup.md)
 - [Security: authentication model](docs/security/authentication.md)
+- [Security: ingesting untrusted code](docs/security/ingestion.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
+- [Phase 4 report](docs/development/phases/phase-04-ingestion.md)

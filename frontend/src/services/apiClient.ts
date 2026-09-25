@@ -143,8 +143,12 @@ export function createApiClient({
     const forwardAbort = () => controller.abort()
     signal?.addEventListener('abort', forwardAbort, { once: true })
 
+    // A file upload is sent as multipart form data, and the browser must set
+    // `Content-Type` itself so it can add the multipart boundary.
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
+
     const headers: Record<string, string> = { Accept: 'application/json' }
-    if (body !== undefined) headers['Content-Type'] = 'application/json'
+    if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json'
     if (auth) {
       const token = getAccessToken()
       if (token) headers.Authorization = `Bearer ${token}`
@@ -161,7 +165,8 @@ export function createApiClient({
         response = await fetchImpl(joinUrl(baseUrl, path), {
           method,
           headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body:
+            body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
           signal: controller.signal,
           credentials: withCredentials ? 'include' : 'same-origin',
         })

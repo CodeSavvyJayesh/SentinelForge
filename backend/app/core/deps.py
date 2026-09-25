@@ -23,6 +23,7 @@ from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService, RequestContext
 from app.services.project_service import ProjectService
+from app.services.repository_service import RepositoryService
 
 UNAUTHENTICATED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
@@ -68,6 +69,13 @@ def get_project_service(db: DbSession) -> ProjectService:
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_repository_service(db: DbSession, settings: AppSettings) -> RepositoryService:
+    return RepositoryService(db, settings)
+
+
+RepositoryServiceDep = Annotated[RepositoryService, Depends(get_repository_service)]
 
 
 def get_current_user(
