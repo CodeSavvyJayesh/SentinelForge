@@ -386,7 +386,7 @@ function RepositoryCard({
         <FindingsPanel
           repositoryId={repository.id}
           analyzedAt={analyzedAt}
-          onAnalyzed={(summary) => setAnalyzedAt(summary.analyzed_at)}
+          onScanned={(scan) => setAnalyzedAt(scan.finished_at ?? scan.created_at)}
         />
       )}
 

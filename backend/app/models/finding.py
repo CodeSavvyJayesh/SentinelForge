@@ -31,6 +31,20 @@ class Confidence(StrEnum):
     LOW = "LOW"
 
 
+class FindingStatus(StrEnum):
+    """Where a finding sits between two scans.
+
+    NEW and OPEN are both present in the code right now; the difference is
+    whether the last scan is the first one that saw it. FIXED means the code
+    changed and it is gone — the row is kept deliberately, because "you fixed
+    two things" is information, and deleting it would make that invisible.
+    """
+
+    NEW = "NEW"
+    OPEN = "OPEN"
+    FIXED = "FIXED"
+
+
 class Finding(TimestampMixin, Base):
     __tablename__ = "findings"
     __table_args__ = (
@@ -38,6 +52,8 @@ class Finding(TimestampMixin, Base):
         UniqueConstraint("repository_id", "fingerprint", name="uq_findings_repository_fingerprint"),
         # The dashboard's only question: this repository's findings, worst first.
         Index("ix_findings_repository_severity", "repository_id", "severity"),
+        # "what changed in this scan" and "what is still open".
+        Index("ix_findings_repository_status", "repository_id", "status"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -66,6 +82,26 @@ class Finding(TimestampMixin, Base):
     snippet: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # --- lifecycle (Phase 6) ----------------------------------------------
+    status: Mapped[FindingStatus] = mapped_column(
+        Enum(FindingStatus, name="finding_status", validate_strings=True),
+        default=FindingStatus.NEW,
+        server_default=FindingStatus.NEW.value,
+        nullable=False,
+    )
+    # Which scan first saw it, which scan last saw it, and which scan noticed
+    # it was gone. Nullable because a scan may be pruned one day; the finding
+    # outlives it.
+    first_seen_scan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
+    )
+    last_seen_scan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
+    )
+    fixed_in_scan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
+    )
 
     repository: Mapped["Repository"] = relationship(back_populates="findings")  # noqa: F821
 

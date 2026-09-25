@@ -2,7 +2,7 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 5 — Static analysis** complete (foundation, accounts, projects, code ingestion, vulnerability detection).
+> Status: **Phase 6 — Scan orchestration** complete (foundation, accounts, projects, ingestion, detection, background scans with history).
 > Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
 > planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
@@ -155,7 +155,7 @@ SentinelForge/
 | 3 | Projects & ownership | ✅ Done |
 | 4 | Repository ingestion & language detection | ✅ Done |
 | 5 | Analysis engine (AST rules, patterns, secret detection) | ✅ Done |
-| 6 | Scan orchestration & background jobs | Planned |
+| 6 | Scan orchestration & background jobs | ✅ Done |
 | 7 | RAG (security knowledge) | Planned |
 | 8 | Local LLM (Ollama) analysis & explanation | Planned |
 | 9 | Risk engine | Planned |
@@ -167,8 +167,8 @@ SentinelForge/
 
 - Analysis is rule-based and local: there is no data-flow (taint) tracking yet, so a finding says "this call is dangerous", not "user input reaches it".
 - "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
-- Analysis runs on request and synchronously; scheduled and background scans arrive in Phase 6.
-- Ingestion and analysis are synchronous, so a very large repository ties up a request until the limits stop it.
+- Scans run in the background on the API machine. Workers on other machines, and scheduled scans, are not built yet.
+- Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
 - Rate-limit counters live in one process (Redis planned when workers multiply).
@@ -187,3 +187,4 @@ SentinelForge/
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
 - [Phase 4 report](docs/development/phases/phase-04-ingestion.md)
 - [Phase 5 report](docs/development/phases/phase-05-analysis.md)
+- [Phase 6 report](docs/development/phases/phase-06-scans.md)

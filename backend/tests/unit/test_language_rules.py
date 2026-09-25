@@ -5,6 +5,8 @@ more than they do for Python: a regex that cannot tell code from a comment will
 happily report a line that says "do not use eval here".
 """
 
+import pytest
+
 from app.analysis.patterns import analyze_with_patterns
 from app.analysis.secrets import analyze_secrets
 from tests.helpers import AWS_ACCESS_KEY_ID as AWS_KEY
@@ -201,6 +203,78 @@ def test_an_env_example_style_file_is_quiet() -> None:
         "PASSWORD=${PASSWORD}\n"
     )
     assert secret_rules(source) == set()
+
+
+# --- env-style files: where secrets actually leak ---------------------------
+#
+# A .env file is written NAME=value with no quotes. The quoted rule above is
+# how *code* is written, so before this rule a repository could carry
+# JWT_SECRET=<the real secret> and the scanner said nothing. The unquoted form
+# is only applied to configuration files: in source code, `token = getToken()`
+# would match it and every scan would be noise.
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "JWT_SECRET=my-actual-jwt-signing-secret-value",
+        "STRIPE_SECRET_KEY=sk_test_abcdefghijklmnop",
+        "ADMIN_PASSWORD=hunter2-but-longer",
+        "export API_TOKEN=live-value-that-is-long",
+    ],
+)
+def test_an_unquoted_env_secret_is_reported(line: str) -> None:
+    assert "SEC005" in {f.rule_id for f in analyze_secrets(line, ".env")}
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "PORT=5000",  # not a credential
+        "# OLD_TOKEN=commented-out-old-value",  # documentation, not a secret
+        "API_KEY=${API_KEY}",  # a reference, which is the fix
+        "JWT_SECRET=CHANGE_ME_generate_a_random_48_byte_value",
+        "DB_PASSWORD=your_password_here",
+    ],
+)
+def test_env_lines_that_are_not_live_secrets_stay_quiet(line: str) -> None:
+    assert analyze_secrets(line, ".env.example") == []
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        ("app/config.py", '# password = "a-real-looking-secret-value"'),
+        ("app/config.py", '   # api_key = "another-real-looking-value"'),
+        (".env", "# API_TOKEN=an-old-value-we-stopped-using"),
+    ],
+)
+def test_a_commented_out_credential_is_not_a_finding(path: str, line: str) -> None:
+    """Commenting a secret out is what someone does *after* rotating it."""
+    assert analyze_secrets(line, path) == []
+
+
+def test_ini_and_properties_files_count_as_env_style() -> None:
+    assert "SEC005" in {
+        f.rule_id for f in analyze_secrets("password=a-real-looking-secret", "config/app.ini")
+    }
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["token = getToken()", "password = other_variable", "secret = load(path)"],
+)
+def test_unquoted_assignments_in_source_code_are_not_reported(line: str) -> None:
+    """The rule that would make every Python file noise if it were applied there."""
+    assert analyze_secrets(line, "app/service.py") == []
+
+
+def test_our_own_env_example_is_still_silent() -> None:
+    """The file whose job is to document credentials must produce nothing."""
+    from app.core.config import BACKEND_DIR
+
+    example = (BACKEND_DIR / ".env.example").read_text()
+    assert analyze_secrets(example, ".env.example") == []
 
 
 def test_one_line_produces_one_credential_finding() -> None:

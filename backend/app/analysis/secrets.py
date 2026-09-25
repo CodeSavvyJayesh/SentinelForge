@@ -85,11 +85,39 @@ SECRET_RULES: tuple[SecretRule, ...] = (
     ),
 )
 
-# name = "value" in most syntaxes: python, js, java, yaml, env files, ini.
+# A regex describing credential-ish *names*, not a credential.
+SECRET_NAME_PATTERN = (
+    r"\w*(?:password|passwd|secret|api[_-]?key|access[_-]?key|auth[_-]?token|token)\w*"  # noqa: S105
+)
+
+# name = "value" — the quoted form, which is how code is written.
 GENERIC_ASSIGNMENT = re.compile(
-    r"(?i)\b(\w*(?:password|passwd|secret|api[_-]?key|access[_-]?key|auth[_-]?token|token)\w*)"
+    rf"(?i)\b({SECRET_NAME_PATTERN})"
     rf"\s*[:=]\s*[\"']([^\"'\n]{{{MIN_SECRET_LENGTH},80}})[\"']"
 )
+
+# NAME=value with no quotes at all, which is how .env files are written — and
+# .env is where secrets actually leak. This form is only used for configuration
+# files, never for source code: in code, `token = getToken()` and
+# `password = other_variable` would both match, and the quoted rule already
+# covers the real case there.
+ENV_ASSIGNMENT = re.compile(
+    rf"(?i)^\s*(?:export\s+)?({SECRET_NAME_PATTERN})\s*=\s*([^\s#\"']{{{MIN_SECRET_LENGTH},120}})\s*$"
+)
+
+# Files whose whole content is `NAME=value` configuration.
+ENV_STYLE_SUFFIXES = frozenset({".env", ".ini", ".cfg", ".conf", ".properties", ".sh"})
+ENV_STYLE_NAMES = frozenset({".env", ".flaskenv"})
+
+
+def is_env_style(file_path: str) -> bool:
+    """True for files written as NAME=value rather than as source code."""
+    name = file_path.rsplit("/", 1)[-1]
+    if name in ENV_STYLE_NAMES or name.startswith(".env"):
+        return True
+    suffix = f".{name.rsplit('.', 1)[-1]}" if "." in name else ""
+    return suffix in ENV_STYLE_SUFFIXES
+
 
 # Lines that are documenting the problem, not committing it.
 REFERENCE_VALUE = re.compile(
@@ -102,6 +130,7 @@ def analyze_secrets(source: str, file_path: str) -> list[Finding]:
 
 
 def _scan(source: str, file_path: str) -> Iterator[Finding]:
+    env_style = is_env_style(file_path)
     for index, raw_line in enumerate(source.splitlines(), start=1):
         if not raw_line.strip():
             continue
@@ -120,7 +149,12 @@ def _scan(source: str, file_path: str) -> Iterator[Finding]:
         if matched_known:
             continue  # one line, one credential: the specific rule wins
 
+        if raw_line.lstrip().startswith("#"):
+            continue  # a commented-out line is documentation, not a live secret
+
         generic = GENERIC_ASSIGNMENT.search(raw_line)
+        if generic is None and env_style:
+            generic = ENV_ASSIGNMENT.match(raw_line)
         if generic:
             name, value = generic.group(1), generic.group(2)
             if _is_placeholder(value) or REFERENCE_VALUE.match(value):
@@ -161,6 +195,23 @@ def _finding(
     )
 
 
+# Values that announce themselves as fill-me-in. A .env.example file is full of
+# these, and reporting it is how a scanner gets muted.
+PLACEHOLDER_PREFIXES = (
+    "change_me",
+    "changeme",
+    "your_",
+    "your-",
+    "replace_",
+    "replace-",
+    "example",
+    "sample",
+    "todo",
+    "insert_",
+    "put_your",
+)
+
+
 def _is_placeholder(value: str) -> bool:
     stripped = value.strip()
     if len(stripped) < MIN_SECRET_LENGTH:
@@ -168,8 +219,10 @@ def _is_placeholder(value: str) -> bool:
     lowered = stripped.lower()
     if lowered in PLACEHOLDER_VALUES:
         return True
-    # "xxxxxxxxxxxx", "************", "your-key-here"
-    return bool(len(set(lowered)) <= 2 or lowered.startswith(("your-", "your_", "<", "${")))
+    if lowered.startswith(PLACEHOLDER_PREFIXES):
+        return True
+    # "xxxxxxxxxxxx", "************", "<your key>", "${VAR}"
+    return bool(len(set(lowered)) <= 2 or lowered.startswith(("<", "${", "$(")))
 
 
 def _mask_line(raw_line: str, value: str) -> str:

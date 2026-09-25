@@ -81,6 +81,9 @@ class Repository(TimestampMixin, Base):
     findings: Mapped[list["Finding"]] = relationship(  # noqa: F821
         back_populates="repository", cascade="all, delete-orphan", passive_deletes=True
     )
+    scans: Mapped[list["Scan"]] = relationship(  # noqa: F821
+        back_populates="repository", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     def __repr__(self) -> str:
         return f"Repository(id={self.id!r}, project_id={self.project_id!r}, source={self.source!r})"

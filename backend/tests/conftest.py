@@ -55,6 +55,14 @@ os.environ.setdefault("MAX_FILE_BYTES", str(200 * 1024))  # 200 KB
 os.environ.setdefault("MAX_FILES", "50")
 os.environ.setdefault("MAX_REPOSITORIES_PER_PROJECT", "3")
 os.environ.setdefault("CLONE_TIMEOUT_SECONDS", "30")
+
+# Scans (Phase 6). The worker never starts itself during tests: a background
+# thread racing the assertions is how a suite becomes flaky. Tests drive the
+# worker explicitly through the `scan_worker` fixture, which is both
+# deterministic and a more honest test of the claim-run-commit cycle.
+os.environ["SCAN_WORKER_ENABLED"] = "false"
+os.environ.setdefault("SCAN_POLL_INTERVAL_SECONDS", "0.05")
+os.environ.setdefault("SCAN_STALE_AFTER_SECONDS", "60")
 os.environ["LOG_FORMAT"] = "text"
 os.environ["ENABLE_API_DOCS"] = "true"
 
@@ -71,6 +79,25 @@ def _clean_workspace_root() -> Iterator[None]:
     """Remove every workspace this test run created."""
     yield
     shutil.rmtree(_TEST_WORKSPACE_ROOT, ignore_errors=True)
+
+
+@pytest.fixture
+def scan_worker(db_session: Session):
+    """A worker that shares the test transaction.
+
+    Its sessions are bound to the same connection as `db_session` and join it
+    as savepoints, so the worker's commits are real commits from its point of
+    view and are still rolled back with the test. Each tick gets a fresh
+    session, exactly as in production, and closing it does not close the
+    test's own.
+    """
+    from app.core.config import get_settings
+    from app.workers.scan_worker import ScanWorker
+
+    def session_factory() -> Session:
+        return Session(bind=db_session.connection(), join_transaction_mode="create_savepoint")
+
+    return ScanWorker(get_settings(), session_factory=session_factory)
 
 
 @pytest.fixture

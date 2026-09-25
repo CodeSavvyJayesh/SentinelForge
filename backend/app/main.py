@@ -23,6 +23,7 @@ from app.core.middleware import (
 )
 from app.core.security import CSRF_HEADER_NAME
 from app.schemas.error import ErrorResponse
+from app.workers.scan_worker import ScanWorker
 
 logger = get_logger("sentinelforge.app")
 
@@ -40,14 +41,26 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     configure_logging(cfg.LOG_LEVEL, cfg.LOG_FORMAT)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         logger.info(
             "app_started",
             extra={"version": cfg.APP_VERSION, "environment": cfg.ENVIRONMENT},
         )
-        yield
-        engine.dispose()
-        logger.info("app_stopped")
+        # The scan worker lives with the application: started here, stopped on
+        # shutdown. Turning it off (SCAN_WORKER_ENABLED=false) is supported and
+        # is how the tests stay deterministic — they drive the worker directly.
+        worker: ScanWorker | None = None
+        if cfg.SCAN_WORKER_ENABLED:
+            worker = ScanWorker(cfg)
+            worker.start()
+        application.state.scan_worker = worker
+        try:
+            yield
+        finally:
+            if worker is not None:
+                worker.stop()
+            engine.dispose()
+            logger.info("app_stopped")
 
     docs_enabled = cfg.ENABLE_API_DOCS
     app = FastAPI(

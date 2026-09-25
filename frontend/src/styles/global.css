@@ -1079,6 +1079,106 @@ a.button {
   margin: 2px 0 0;
 }
 
+/* ---------- Scans (Phase 6) ---------- */
+
+.state-tag {
+  flex-shrink: 0;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.state-tag--new,
+.state-tag--scan-running,
+.state-tag--scan-queued {
+  color: var(--color-accent);
+}
+
+.state-tag--fixed,
+.state-tag--scan-completed {
+  color: var(--color-ok);
+}
+
+.state-tag--scan-failed {
+  color: var(--color-fail);
+}
+
+.chip--status-new.chip--active {
+  color: var(--color-accent);
+}
+
+.chip--status-fixed.chip--active {
+  color: var(--color-ok);
+}
+
+/* A fixed finding is history, not a current problem: present, but quieter. */
+.finding--fixed {
+  opacity: 0.72;
+}
+
+.finding--fixed .finding__title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.scan-history {
+  margin-top: var(--space-4);
+}
+
+.scan-history__toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.scan-history__toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.scan-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  font-size: 0.8125rem;
+}
+
+.scan-table th,
+.scan-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.scan-table thead th {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.scan-table__error {
+  color: var(--color-fail);
+  white-space: normal;
+}
+
+@media (max-width: 720px) {
+  /* The history table is the one place a horizontal scroll beats reflowing. */
+  .scan-history {
+    overflow-x: auto;
+  }
+}
+
 @media (max-width: 720px) {
   .toolbar,
   .form-actions {
