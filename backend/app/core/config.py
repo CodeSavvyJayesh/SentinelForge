@@ -108,6 +108,18 @@ class Settings(BaseSettings):
     # that a longer list will not help with; the result says it was truncated.
     ANALYSIS_MAX_FINDINGS: int = Field(default=2000, ge=1)
 
+    # --- Background scans (Phase 6) ----------------------------------------
+    # The worker runs in the API process. Turn it off to run scans from a
+    # separate process (scripts/run_scans.py) or to keep a test deterministic.
+    SCAN_WORKER_ENABLED: bool = True
+    SCAN_POLL_INTERVAL_SECONDS: float = Field(default=1.0, gt=0, le=60)
+    # A scan still RUNNING after this long belongs to a process that died; the
+    # next startup requeues it. Must comfortably exceed a real scan's duration.
+    SCAN_STALE_AFTER_SECONDS: int = Field(default=900, ge=60)
+    # How many times a scan may be claimed before it is marked FAILED. Stops a
+    # repository that crashes the analyser from being retried forever.
+    SCAN_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

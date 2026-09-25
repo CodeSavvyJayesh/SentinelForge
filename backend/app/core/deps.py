@@ -25,6 +25,7 @@ from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
+from app.services.scan_service import ScanService
 
 UNAUTHENTICATED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
@@ -84,6 +85,13 @@ def get_analysis_service(db: DbSession, settings: AppSettings) -> AnalysisServic
 
 
 AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
+
+
+def get_scan_service(db: DbSession, settings: AppSettings) -> ScanService:
+    return ScanService(db, settings)
+
+
+ScanServiceDep = Annotated[ScanService, Depends(get_scan_service)]
 
 
 def get_current_user(

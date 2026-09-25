@@ -5,10 +5,10 @@ belongs to a repository, which belongs to a project, which belongs to a user,
 so every lookup joins all the way back to ``projects.owner_id``.
 """
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Finding, Project, Repository, Severity
+from app.models import Finding, FindingStatus, Project, Repository, Severity
 
 
 class FindingRepository:
@@ -29,11 +29,12 @@ class FindingRepository:
         repository_id: int,
         *,
         severity: Severity | None = None,
+        status: FindingStatus | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Finding]:
         statement = (
-            self._for_repository(repository_id, severity)
+            self._for_repository(repository_id, severity, status)
             # Worst first, then stable: two runs list the same findings in the
             # same order, which is what makes a report diffable.
             .order_by(
@@ -47,39 +48,65 @@ class FindingRepository:
         )
         return list(self.db.scalars(statement))
 
-    def count_for_repository(self, repository_id: int, severity: Severity | None = None) -> int:
+    def count_for_repository(
+        self,
+        repository_id: int,
+        severity: Severity | None = None,
+        status: FindingStatus | None = None,
+    ) -> int:
         statement = select(func.count()).select_from(
-            self._for_repository(repository_id, severity).subquery()
+            self._for_repository(repository_id, severity, status).subquery()
         )
         return self.db.scalar(statement) or 0
 
     def counts_by_severity(self, repository_id: int) -> dict[str, int]:
+        """Severity counts for findings that are still present.
+
+        Fixed findings are excluded: a repository with one CRITICAL that was
+        fixed last week should not still read "1 CRITICAL" on the dashboard.
+        """
         statement = (
             select(Finding.severity, func.count())
-            .where(Finding.repository_id == repository_id)
+            .where(
+                Finding.repository_id == repository_id,
+                Finding.status != FindingStatus.FIXED,
+            )
             .group_by(Finding.severity)
         )
         return {str(severity): count for severity, count in self.db.execute(statement)}
 
-    def replace_all(self, repository_id: int, findings: list[Finding]) -> None:
-        """Swap in a fresh set of findings for one repository.
+    def counts_by_status(self, repository_id: int) -> dict[str, int]:
+        statement = (
+            select(Finding.status, func.count())
+            .where(Finding.repository_id == repository_id)
+            .group_by(Finding.status)
+        )
+        return {str(status): count for status, count in self.db.execute(statement)}
 
-        Re-analysis replaces rather than appends: the findings are a statement
-        about the code as it is now, not a history of every run. (History
-        belongs to scans, in Phase 6.)
+    def list_all(self, repository_id: int) -> list[Finding]:
+        """Every finding for a repository, fixed ones included.
+
+        The scan lifecycle needs the fixed rows too: a finding that comes back
+        is a regression, and it can only be recognised as one if the old row is
+        still there to compare against.
         """
-        self.db.execute(delete(Finding).where(Finding.repository_id == repository_id))
-        self.db.flush()
-        if findings:
-            self.db.add_all(findings)
-        self.db.flush()
+        return list(self.db.scalars(select(Finding).where(Finding.repository_id == repository_id)))
+
+    def add(self, finding: Finding) -> Finding:
+        self.db.add(finding)
+        return finding
 
     def _for_repository(
-        self, repository_id: int, severity: Severity | None
+        self,
+        repository_id: int,
+        severity: Severity | None,
+        status: FindingStatus | None = None,
     ) -> Select[tuple[Finding]]:
         statement = select(Finding).where(Finding.repository_id == repository_id)
         if severity is not None:
             statement = statement.where(Finding.severity == severity)
+        if status is not None:
+            statement = statement.where(Finding.status == status)
         return statement
 
 

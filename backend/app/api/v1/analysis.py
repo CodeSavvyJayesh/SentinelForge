@@ -1,22 +1,26 @@
-"""Analysis endpoints.
+"""Finding endpoints.
 
-Analysis runs synchronously, like ingestion, and for the same reason: Phase 6
-owns background jobs, and a fake queue would be worse than an honest wait. The
-engine is bounded (file size, finding cap), so the wait has a ceiling.
+Reading findings only. Running the analysers is a *scan* (see `scans.py`),
+which is queued and executed by the background worker — Phase 5's synchronous
+`POST /analyze` is gone, along with the request it used to hold open.
 """
 
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.core.deps import AnalysisServiceDep, Context, CurrentUser, DbSession
-from app.models.finding import Severity
+from app.core.deps import AnalysisServiceDep, CurrentUser
+from app.models.finding import FindingStatus, Severity
 from app.schemas.error import ErrorResponse
-from app.schemas.finding import AnalysisSummaryResponse, FindingListResponse, FindingRead
+from app.schemas.finding import FindingListResponse, FindingRead
 
-router = APIRouter(tags=["analysis"])
+router = APIRouter(tags=["findings"])
 
 SeverityFilter = Annotated[Severity | None, Query(description="Only findings of this severity")]
+StatusFilter = Annotated[
+    FindingStatus | None,
+    Query(description="NEW (since the previous scan), OPEN (still there) or FIXED"),
+]
 
 NOT_FOUND_RESPONSE: dict[int | str, dict[str, object]] = {
     404: {
@@ -24,27 +28,6 @@ NOT_FOUND_RESPONSE: dict[int | str, dict[str, object]] = {
         "description": "No such repository or finding, or it belongs to someone else",
     },
 }
-
-
-@router.post(
-    "/repositories/{repository_id}/analyze",
-    response_model=AnalysisSummaryResponse,
-    summary="Run static analysis over an ingested repository",
-    responses={
-        **NOT_FOUND_RESPONSE,
-        409: {"model": ErrorResponse, "description": "The repository has no code to analyse"},
-    },
-)
-def analyze_repository(
-    repository_id: int,
-    user: CurrentUser,
-    service: AnalysisServiceDep,
-    context: Context,
-    db: DbSession,
-) -> AnalysisSummaryResponse:
-    summary = service.analyze(repository_id, user, context)
-    db.commit()
-    return AnalysisSummaryResponse(**vars(summary))
 
 
 @router.get(
@@ -58,14 +41,23 @@ def list_findings(
     user: CurrentUser,
     service: AnalysisServiceDep,
     severity: SeverityFilter = None,
+    finding_status: StatusFilter = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> FindingListResponse:
-    page = service.list_findings(repository_id, user, severity=severity, limit=limit, offset=offset)
+    page = service.list_findings(
+        repository_id,
+        user,
+        severity=severity,
+        status=finding_status,
+        limit=limit,
+        offset=offset,
+    )
     return FindingListResponse(
         items=[FindingRead.model_validate(item) for item in page.items],
         total=page.total,
         by_severity=page.by_severity,
+        by_status=page.by_status,
         limit=page.limit,
         offset=page.offset,
     )

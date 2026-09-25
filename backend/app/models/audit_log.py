@@ -31,6 +31,9 @@ class AuditAction(StrEnum):
     REPOSITORY_INGEST_FAILED = "repository.ingest_failed"
     REPOSITORY_DELETED = "repository.deleted"
     REPOSITORY_ANALYZED = "repository.analyzed"
+    SCAN_QUEUED = "scan.queued"
+    SCAN_COMPLETED = "scan.completed"
+    SCAN_FAILED = "scan.failed"
 
 
 class AuditLog(Base):

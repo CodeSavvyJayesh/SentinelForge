@@ -131,6 +131,26 @@ def test_a_github_style_wrapper_folder_is_unwrapped(
     assert not (workspace / "flask-main").exists()
 
 
+def test_a_single_source_directory_is_not_mistaken_for_a_wrapper(
+    api_client: TestClient, db_session: Session, workspace_root: Path
+) -> None:
+    """A zip containing only `src/` keeps its `src/` prefix.
+
+    Unwrapping it would report `src/main.py` as `main.py`, which is not a path
+    that exists in the repository the developer is looking at.
+    """
+    token = sign_up(api_client, "alice")
+    project_id = new_project(api_client, token)
+    only_src = {"src/main.py": b"print(1)\n", "src/util.py": b"x = 2\n"}
+
+    repository_id = upload(api_client, token, project_id, zip_bytes(only_src)).json()["id"]
+
+    row = db_session.get(Repository, repository_id)
+    workspace = workspace_root / row.workspace_path
+    assert (workspace / "src" / "main.py").exists()
+    assert not (workspace / "main.py").exists()
+
+
 def test_a_malicious_archive_is_refused_and_recorded(
     api_client: TestClient, db_session: Session, workspace_root: Path
 ) -> None:

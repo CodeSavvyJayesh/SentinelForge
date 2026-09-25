@@ -241,6 +241,19 @@ def test_env_lines_that_are_not_live_secrets_stay_quiet(line: str) -> None:
     assert analyze_secrets(line, ".env.example") == []
 
 
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        ("app/config.py", '# password = "a-real-looking-secret-value"'),
+        ("app/config.py", '   # api_key = "another-real-looking-value"'),
+        (".env", "# API_TOKEN=an-old-value-we-stopped-using"),
+    ],
+)
+def test_a_commented_out_credential_is_not_a_finding(path: str, line: str) -> None:
+    """Commenting a secret out is what someone does *after* rotating it."""
+    assert analyze_secrets(line, path) == []
+
+
 def test_ini_and_properties_files_count_as_env_style() -> None:
     assert "SEC005" in {
         f.rule_id for f in analyze_secrets("password=a-real-looking-secret", "config/app.ini")

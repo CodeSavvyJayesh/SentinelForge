@@ -168,31 +168,60 @@ A rejected upload or clone still leaves a row with `status: "FAILED"` and a
 safe `error_message`, so the attempt is visible instead of silently vanishing.
 The workspace is deleted in that case.
 
-## Analysis and findings
+## Scans
 
 | Endpoint | Auth | Notes |
 | --- | --- | --- |
-| `POST /api/v1/repositories/{id}/analyze` | Bearer | runs the analysers over the ingested code; replaces the previous findings |
-| `GET /api/v1/repositories/{id}/findings` | Bearer | `severity`, `limit`, `offset` |
-| `GET /api/v1/findings/{id}` | Bearer | one finding |
+| `POST /api/v1/repositories/{id}/scans` | Bearer | **202 Accepted** — queues a scan and returns immediately |
+| `GET /api/v1/repositories/{id}/scans` | Bearer | history, newest first |
+| `GET /api/v1/scans/{id}` | Bearer | poll this while the scan is `QUEUED` or `RUNNING` |
 
-The analyse response is a summary, not the findings themselves:
+Queueing answers `202`, not `200`: the work has been accepted, not done. A
+background worker claims the scan and runs it; the client polls the scan until
+its status leaves `QUEUED`/`RUNNING`.
 
 ```json
-{"repository_id": 5, "findings": 6, "by_severity": {"CRITICAL": 1, "HIGH": 3, "MEDIUM": 2},
- "files_scanned": 3, "files_skipped": 0, "unparsable_files": 0,
- "truncated": false, "duration_ms": 41, "analyzed_at": "2026-09-25T12:01:04Z"}
+{"id": 12, "repository_id": 5, "status": "COMPLETED",
+ "files_scanned": 3, "total_findings": 6, "new_findings": 2, "fixed_findings": 1,
+ "truncated": false, "duration_ms": 41, "started_at": "...", "finished_at": "..."}
 ```
 
-`truncated: true` means the finding cap was reached and the list is partial —
-the API says so rather than presenting a capped list as complete. `by_severity`
-in the findings list counts the **whole repository**, so a severity filter
-cannot make the totals shown beside it lie.
+Those counts are **frozen when the scan ran** — a history row still tells the
+truth after the findings have moved on. `truncated: true` means the finding cap
+was reached and the result is partial, said out loud rather than presented as
+complete.
 
-Codes: `REPOSITORY_NOT_ANALYSABLE` (409 — the repository failed to ingest, or
-its stored copy is gone; deliberately not "0 findings", which would read as
-"clean"), `FINDING_NOT_FOUND` (404), `REPOSITORY_NOT_FOUND` (404 for someone
-else's repository, exactly as in Phase 4).
+Codes: `SCAN_ALREADY_RUNNING` (409 — one scan at a time per repository, because
+two would race and the loser's view of what is fixed would be silently
+overwritten), `REPOSITORY_NOT_SCANNABLE` (409 — nothing ingested, or the stored
+copy is gone; deliberately not "0 findings", which would read as "clean"),
+`SCAN_NOT_FOUND` (404).
+
+Phase 5's synchronous `POST /repositories/{id}/analyze` is **gone**. It held the
+request open for the whole analysis and left no record that a run happened.
+
+## Findings
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/repositories/{id}/findings` | Bearer | `severity`, `finding_status`, `limit`, `offset` |
+| `GET /api/v1/findings/{id}` | Bearer | one finding |
+
+Every finding carries a lifecycle:
+
+| `status` | Meaning |
+| --- | --- |
+| `NEW` | the last scan is the first that saw it |
+| `OPEN` | it was there before and is still there |
+| `FIXED` | it was there before and the last scan could not find it |
+
+Fixed findings are **kept**, not deleted: "you fixed two things" is information.
+They are excluded from `by_severity`, because a CRITICAL fixed last week is not
+still a CRITICAL. `by_severity` and `by_status` always describe the whole
+repository, so a filter cannot make the numbers shown beside it lie.
+
+Codes: `FINDING_NOT_FOUND` (404), `REPOSITORY_NOT_FOUND` (404 for someone else's
+repository, exactly as in Phase 4).
 
 Findings carry `severity` **and** `confidence`: how bad it would be, and how
 sure the analyser is. `snippet` is code from the analysed repository with any

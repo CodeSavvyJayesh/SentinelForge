@@ -23,6 +23,15 @@ class RepositoryRepository:
         )
         return self.db.scalars(statement).first()
 
+    def get(self, repository_id: int) -> Repository | None:
+        """Unscoped lookup — for the background worker only.
+
+        The worker has no user: it acts on a scan row the API already
+        authorised when it was queued. Every path that serves a request still
+        goes through ``get_for_owner``.
+        """
+        return self.db.get(Repository, repository_id)
+
     def list_for_project(self, project_id: int) -> list[Repository]:
         statement = (
             select(Repository)

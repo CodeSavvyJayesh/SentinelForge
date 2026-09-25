@@ -1,4 +1,9 @@
-"""Analysis through the API: real code in, real findings out, scoped to you."""
+"""Findings through the API: real code in, real findings out, scoped to you.
+
+Since Phase 6 the findings are produced by a *scan* — queued, then run by the
+worker — so these tests queue one and drive the worker, rather than calling a
+synchronous endpoint that no longer exists.
+"""
 
 import io
 import zipfile
@@ -8,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AuditAction, AuditLog, Finding, Repository
+from app.models import Finding
 
 pytestmark = pytest.mark.integration
 
@@ -61,6 +66,13 @@ def zip_bytes(entries: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
+def scan(client: TestClient, token: str, repository_id: int, worker) -> None:
+    """Queue a scan and run it, the way the application does."""
+    response = client.post(f"/api/v1/repositories/{repository_id}/scans", headers=auth(token))
+    assert response.status_code == 202, response.text
+    assert worker.tick() is True
+
+
 def ingested_repository(
     client: TestClient, token: str, entries: dict[str, bytes] = VULNERABLE_PROJECT
 ) -> int:
@@ -78,25 +90,10 @@ def ingested_repository(
 # --- analysing ------------------------------------------------------------
 
 
-def test_analysing_a_repository_finds_real_issues(api_client: TestClient) -> None:
+def test_the_findings_are_the_ones_planted(api_client: TestClient, scan_worker) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-
-    response = api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    assert response.status_code == 200, response.text
-    summary = response.json()
-    assert summary["findings"] > 0
-    assert summary["files_scanned"] == 3
-    assert summary["by_severity"]["CRITICAL"] >= 1
-    assert summary["truncated"] is False
-    assert summary["analyzed_at"] is not None
-
-
-def test_the_findings_are_the_ones_planted(api_client: TestClient) -> None:
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     body = api_client.get(
         f"/api/v1/repositories/{repository_id}/findings", headers=auth(token)
@@ -109,10 +106,10 @@ def test_the_findings_are_the_ones_planted(api_client: TestClient) -> None:
     assert body["total"] == len(body["items"])
 
 
-def test_findings_carry_their_cwe_and_location(api_client: TestClient) -> None:
+def test_findings_carry_their_cwe_and_location(api_client: TestClient, scan_worker) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     items = api_client.get(
         f"/api/v1/repositories/{repository_id}/findings", headers=auth(token)
@@ -127,11 +124,11 @@ def test_findings_carry_their_cwe_and_location(api_client: TestClient) -> None:
 
 
 def test_a_stored_credential_finding_never_contains_the_credential(
-    api_client: TestClient, db_session: Session
+    api_client: TestClient, db_session: Session, scan_worker
 ) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     rows = db_session.scalars(select(Finding).where(Finding.repository_id == repository_id)).all()
 
@@ -141,69 +138,10 @@ def test_a_stored_credential_finding_never_contains_the_credential(
         assert "sup3r-s3cret-database-value" not in row.message
 
 
-def test_a_clean_repository_reports_zero_not_an_error(api_client: TestClient) -> None:
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token, CLEAN_PROJECT)
-
-    response = api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    assert response.status_code == 200
-    assert response.json()["findings"] == 0
-    assert response.json()["files_scanned"] == 1
-
-
-def test_re_analysis_replaces_rather_than_duplicates(
-    api_client: TestClient, db_session: Session
-) -> None:
+def test_findings_can_be_filtered_by_severity(api_client: TestClient, scan_worker) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-
-    first = api_client.post(
-        f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token)
-    ).json()
-    second = api_client.post(
-        f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token)
-    ).json()
-
-    assert first["findings"] == second["findings"]
-    rows = db_session.scalars(select(Finding).where(Finding.repository_id == repository_id)).all()
-    assert len(rows) == second["findings"]
-
-
-def test_analysing_records_when_it_happened(api_client: TestClient, db_session: Session) -> None:
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token)
-    assert db_session.get(Repository, repository_id).analyzed_at is None
-
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    db_session.expire_all()
-    assert db_session.get(Repository, repository_id).analyzed_at is not None
-
-
-def test_analysis_is_audited_with_counts_not_code(
-    api_client: TestClient, db_session: Session
-) -> None:
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    entry = db_session.scalars(
-        select(AuditLog).where(AuditLog.action == str(AuditAction.REPOSITORY_ANALYZED))
-    ).one()
-
-    assert entry.entity_type == "repository"
-    assert entry.details["findings"] > 0
-    assert "sup3r-s3cret-database-value" not in str(entry.details)
-
-
-# --- filtering and pagination --------------------------------------------
-
-
-def test_findings_can_be_filtered_by_severity(api_client: TestClient) -> None:
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     body = api_client.get(
         f"/api/v1/repositories/{repository_id}/findings?severity=CRITICAL",
@@ -217,7 +155,7 @@ def test_findings_can_be_filtered_by_severity(api_client: TestClient) -> None:
     assert sum(body["by_severity"].values()) > body["total"]
 
 
-def test_an_unknown_severity_is_rejected(api_client: TestClient) -> None:
+def test_an_unknown_severity_is_rejected(api_client: TestClient, scan_worker) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
 
@@ -228,10 +166,10 @@ def test_an_unknown_severity_is_rejected(api_client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_findings_paginate(api_client: TestClient) -> None:
+def test_findings_paginate(api_client: TestClient, scan_worker) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     first = api_client.get(
         f"/api/v1/repositories/{repository_id}/findings?limit=2&offset=0", headers=auth(token)
@@ -249,62 +187,11 @@ def test_findings_paginate(api_client: TestClient) -> None:
 # --- refusals -------------------------------------------------------------
 
 
-def test_analysing_a_failed_repository_is_refused(api_client: TestClient) -> None:
-    token = sign_up(api_client, "alice")
-    project_id = api_client.post(PROJECTS, json={"name": "X"}, headers=auth(token)).json()["id"]
-    api_client.post(
-        f"{PROJECTS}/{project_id}/repositories/upload",
-        files={"file": ("broken.zip", b"not a zip at all", "application/zip")},
-        headers=auth(token),
-    )
-    repository_id = api_client.get(
-        f"{PROJECTS}/{project_id}/repositories", headers=auth(token)
-    ).json()["items"][0]["id"]
-
-    response = api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "REPOSITORY_NOT_ANALYSABLE"
-
-
-def test_a_missing_workspace_is_refused_not_reported_as_clean(
-    api_client: TestClient, db_session: Session, workspace_root
-) -> None:
-    """ "0 findings" would read as "your code is fine". It is not the same thing."""
-    import shutil
-
-    token = sign_up(api_client, "alice")
-    repository_id = ingested_repository(api_client, token)
-    row = db_session.get(Repository, repository_id)
-    shutil.rmtree(workspace_root / row.workspace_path)
-
-    response = api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
-
-    assert response.status_code == 409
-    assert "missing" in response.json()["error"]["message"].lower()
-
-
-# --- ownership ------------------------------------------------------------
-
-
-def test_another_user_cannot_analyse_your_repository(api_client: TestClient) -> None:
+def test_another_user_cannot_read_your_findings(api_client: TestClient, scan_worker) -> None:
     alice_token = sign_up(api_client, "alice")
     bob_token = sign_up(api_client, "bob")
     repository_id = ingested_repository(api_client, alice_token)
-
-    response = api_client.post(
-        f"/api/v1/repositories/{repository_id}/analyze", headers=auth(bob_token)
-    )
-
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "REPOSITORY_NOT_FOUND"
-
-
-def test_another_user_cannot_read_your_findings(api_client: TestClient) -> None:
-    alice_token = sign_up(api_client, "alice")
-    bob_token = sign_up(api_client, "bob")
-    repository_id = ingested_repository(api_client, alice_token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(alice_token))
+    scan(api_client, alice_token, repository_id, scan_worker)
     finding_id = api_client.get(
         f"/api/v1/repositories/{repository_id}/findings", headers=auth(alice_token)
     ).json()["items"][0]["id"]
@@ -322,18 +209,17 @@ def test_another_user_cannot_read_your_findings(api_client: TestClient) -> None:
     assert single.json()["error"]["message"] == missing.json()["error"]["message"]
 
 
-def test_analysis_endpoints_need_a_token(api_client: TestClient) -> None:
-    assert api_client.post("/api/v1/repositories/1/analyze").status_code == 401
+def test_finding_endpoints_need_a_token(api_client: TestClient, scan_worker) -> None:
     assert api_client.get("/api/v1/repositories/1/findings").status_code == 401
     assert api_client.get("/api/v1/findings/1").status_code == 401
 
 
 def test_deleting_a_repository_deletes_its_findings(
-    api_client: TestClient, db_session: Session
+    api_client: TestClient, db_session: Session, scan_worker
 ) -> None:
     token = sign_up(api_client, "alice")
     repository_id = ingested_repository(api_client, token)
-    api_client.post(f"/api/v1/repositories/{repository_id}/analyze", headers=auth(token))
+    scan(api_client, token, repository_id, scan_worker)
 
     api_client.delete(f"/api/v1/repositories/{repository_id}", headers=auth(token))
 

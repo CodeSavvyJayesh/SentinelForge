@@ -125,6 +125,31 @@ workspace  →  per-file analyser choice  →  findings  →  collapse + number 
 - The `Finding` shape is normalised so a third-party scanner (Semgrep, Bandit)
   can be added later as just another analyser.
 
+## Background work
+
+```
+POST /scans  →  QUEUED row  ←──claim (FOR UPDATE SKIP LOCKED)──  worker thread
+   202                                                                 ↓
+client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  analysis
+```
+
+- **The queue is the `scans` table.** PostgreSQL's `SELECT … FOR UPDATE SKIP
+  LOCKED` gives the two properties that matter: a job is never handed to two
+  workers, and a crash cannot lose it. No Redis, no broker, no second service
+  to install and explain.
+- **The worker is a thread started with the app** (`SCAN_WORKER_ENABLED`), so a
+  deployment can turn it off and run scans from a separate process instead.
+  Workers on *other machines* is where Celery would earn its keep; that is the
+  documented scale-out path, not something pretended to exist.
+- **Each scan is one session and one transaction.** A process that dies
+  mid-scan rolls back to `QUEUED`, and the next startup sweep requeues anything
+  left `RUNNING` — up to `SCAN_MAX_ATTEMPTS`, after which the scan is failed
+  rather than retried forever.
+- **Findings survive scans.** A finding row is keyed by fingerprint and its
+  *status* changes: `NEW` → `OPEN` → `FIXED`, with a regression going back to
+  `NEW`. Phase 5 deleted and re-inserted, which made "you fixed two things"
+  impossible to say.
+
 ## Current vs planned components
 
 | Component | Status |
@@ -136,7 +161,7 @@ workspace  →  per-file analyser choice  →  findings  →  collapse + number 
 | Projects with per-user ownership | Implemented (Phase 3) |
 | Repositories, ingestion (zip upload, git clone, language detection) | Implemented (Phase 4) — see [security/ingestion.md](../security/ingestion.md) |
 | Static analysis engine (AST + patterns + secrets) | Implemented (Phase 5) — see [security/analysis.md](../security/analysis.md) |
-| Scan orchestration, background jobs | Phase 6 |
+| Scan orchestration, background worker, finding lifecycle | Implemented (Phase 6) |
 | RAG, Ollama LLM, risk engine | Phases 7–9 |
 | Patch generation & validation | Phases 10–11 |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |

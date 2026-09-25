@@ -3,6 +3,9 @@
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'
 export type Confidence = 'HIGH' | 'MEDIUM' | 'LOW'
 
+/** NEW: appeared in the last scan. OPEN: was already there. FIXED: gone now. */
+export type FindingStatus = 'NEW' | 'OPEN' | 'FIXED'
+
 /** Worst first — used for ordering and for the severity filter row. */
 export const SEVERITIES: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
 
@@ -24,26 +27,20 @@ export interface Finding {
    *  Rendered as text, never as HTML. */
   snippet: string
   fingerprint: string
+  status: FindingStatus
+  first_seen_scan_id: number | null
+  last_seen_scan_id: number | null
+  fixed_in_scan_id: number | null
   created_at: string
 }
 
 export interface FindingListResponse {
   items: Finding[]
   total: number
-  /** Counts for the whole repository, unaffected by the severity filter. */
+  /** Whole-repository counts, unaffected by the filters. Severity counts
+   *  exclude fixed findings. */
   by_severity: Record<string, number>
+  by_status: Record<string, number>
   limit: number
   offset: number
-}
-
-export interface AnalysisSummary {
-  repository_id: number
-  findings: number
-  by_severity: Record<string, number>
-  files_scanned: number
-  files_skipped: number
-  unparsable_files: number
-  truncated: boolean
-  duration_ms: number
-  analyzed_at: string
 }

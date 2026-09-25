@@ -134,10 +134,12 @@ function ProjectView({
       <RepositoryPanel projectId={project.id} defaultBranch={project.default_branch} />
 
       <div className="panel panel--planned">
-        <h2 className="panel__title">Scan history</h2>
+        <h2 className="panel__title">What arrives next</h2>
         <p>
-          Each repository above can be analysed now, and shows its current findings. Scheduled and
-          background scans, with a history you can compare over time, arrive in Phase 6.
+          Scans run in the background and keep their history, and each finding tracks whether it is
+          new, still open or fixed. Explanations of <em>why</em> a finding matters, written by a
+          local language model, arrive in Phases 7–8; scheduled scans and CI integration come with
+          the DevSecOps phase.
         </p>
       </div>
 

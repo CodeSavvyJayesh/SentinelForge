@@ -329,14 +329,48 @@ class RepositoryService:
         )
 
 
+# Directory names that are part of a project's own layout, not a wrapper
+# around it. Unwrapping one of these would rewrite every finding's path:
+# `src/main.py` would be reported as `main.py`, which does not exist in the
+# repository the developer is looking at.
+SOURCE_DIRECTORY_NAMES = frozenset(
+    {
+        "src",
+        "app",
+        "apps",
+        "lib",
+        "libs",
+        "source",
+        "sources",
+        "backend",
+        "frontend",
+        "server",
+        "client",
+        "api",
+        "web",
+        "test",
+        "tests",
+        "docs",
+        "packages",
+    }
+)
+
+
 def _flatten_single_root(workspace: Path) -> None:
     """Unwrap ``project-main/`` when an archive nests everything one level deep.
 
     GitHub's "Download ZIP" produces ``repo-main/...``; without this, every
-    analysed path in later phases carries a meaningless prefix.
+    analysed path carries a meaningless prefix.
+
+    But a zip of a project that happens to contain only ``src/`` is *not*
+    wrapped — that directory is part of the layout, and removing it would make
+    every reported path wrong. Name is the only signal available here, so the
+    common source-directory names are left alone.
     """
     entries = list(workspace.iterdir())
     if len(entries) != 1 or not entries[0].is_dir() or entries[0].is_symlink():
+        return
+    if entries[0].name.lower() in SOURCE_DIRECTORY_NAMES:
         return
     wrapper = entries[0]
     for child in list(wrapper.iterdir()):
