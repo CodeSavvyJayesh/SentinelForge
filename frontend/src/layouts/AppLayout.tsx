@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { NavLink } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
 
@@ -15,7 +16,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         Skip to content
       </a>
       <header className="topbar">
-        <div className="brand">
+        <NavLink className="brand" to="/projects">
           <svg className="brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
             <path
               d="M16 2 4 6.5v8.2c0 7.4 5.1 13.4 12 15.3 6.9-1.9 12-7.9 12-15.3V6.5z"
@@ -31,16 +32,30 @@ export function AppLayout({ children }: AppLayoutProps) {
             />
           </svg>
           <span className="brand__name">SentinelForge</span>
-        </div>
+        </NavLink>
+
         <nav aria-label="Primary">
           <ul className="nav">
             <li>
-              <a className="nav__link" aria-current="page" href="/">
-                System status
-              </a>
+              <NavLink className="nav__link" to="/projects">
+                Projects
+              </NavLink>
             </li>
+            <li>
+              <NavLink className="nav__link" to="/status">
+                System status
+              </NavLink>
+            </li>
+            {user?.role === 'ADMIN' && (
+              <li>
+                <NavLink className="nav__link" to="/users">
+                  Accounts
+                </NavLink>
+              </li>
+            )}
           </ul>
         </nav>
+
         {user && (
           <div className="topbar__user">
             <span className="topbar__username">{user.username}</span>

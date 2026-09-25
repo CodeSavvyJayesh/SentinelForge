@@ -5,7 +5,8 @@ Alembic autogenerate imports this package to discover tables.
 """
 
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.project import Project
 from app.models.refresh_session import RefreshSession
 from app.models.user import User, UserRole
 
-__all__ = ["AuditAction", "AuditLog", "RefreshSession", "User", "UserRole"]
+__all__ = ["AuditAction", "AuditLog", "Project", "RefreshSession", "User", "UserRole"]

@@ -22,6 +22,7 @@ from app.core.security import (
 from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService, RequestContext
+from app.services.project_service import ProjectService
 
 UNAUTHENTICATED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
@@ -60,6 +61,13 @@ def get_auth_service(db: DbSession, settings: AppSettings) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_project_service(db: DbSession) -> ProjectService:
+    return ProjectService(db)
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 
 
 def get_current_user(

@@ -1,15 +1,22 @@
-import { AppLayout } from './layouts/AppLayout'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+
 import { LoadingState } from './components/LoadingState'
 import { AuthProvider } from './context/AuthProvider'
 import { useAuth } from './hooks/useAuth'
+import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { ProjectCreatePage } from './pages/ProjectCreatePage'
+import { ProjectDetailPage } from './pages/ProjectDetailPage'
+import { ProjectsPage } from './pages/ProjectsPage'
 import { SystemStatusPage } from './pages/SystemStatusPage'
-import { UsersPanel } from './pages/UsersPanel'
+import { UsersPage } from './pages/UsersPage'
 
 export default function App() {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <BrowserRouter>
+        <AuthenticatedApp />
+      </BrowserRouter>
     </AuthProvider>
   )
 }
@@ -40,18 +47,28 @@ function AuthenticatedApp() {
 
   return (
     <AppLayout>
-      <SystemStatusPage />
-      {user?.role === 'ADMIN' && (
-        <section className="page" aria-labelledby="accounts-title">
-          <div className="page__header">
-            <div>
-              <h2 id="accounts-title">Administration</h2>
-              <p className="page__subtitle">Visible to administrators only.</p>
-            </div>
-          </div>
-          <UsersPanel />
-        </section>
-      )}
+      <Routes>
+        <Route path="/" element={<Navigate to="/projects" replace />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/projects/new" element={<ProjectCreatePage />} />
+        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/status" element={<SystemStatusPage />} />
+        {/* Admin-only route: guarded here and again by the API. */}
+        <Route
+          path="/users"
+          element={user?.role === 'ADMIN' ? <UsersPage /> : <Navigate to="/projects" replace />}
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
     </AppLayout>
+  )
+}
+
+function NotFoundPage() {
+  return (
+    <section className="page">
+      <h1>Page not found</h1>
+      <p className="page__subtitle">That address does not exist in SentinelForge.</p>
+    </section>
   )
 }

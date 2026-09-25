@@ -2,6 +2,7 @@ import { appConfig } from '../config/env'
 import { createApiClient } from './apiClient'
 import { createAuthService } from './authService'
 import { createHealthService } from './healthService'
+import { createProjectService } from './projectService'
 import { createUserService } from './userService'
 import { tokenStore } from './tokenStore'
 
@@ -29,3 +30,4 @@ export const apiClient = createApiClient({
 export const authService = createAuthService(apiClient)
 export const healthService = createHealthService(apiClient)
 export const userService = createUserService(apiClient)
+export const projectService = createProjectService(apiClient)
