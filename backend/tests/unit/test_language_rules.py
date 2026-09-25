@@ -7,6 +7,8 @@ happily report a line that says "do not use eval here".
 
 from app.analysis.patterns import analyze_with_patterns
 from app.analysis.secrets import analyze_secrets
+from tests.helpers import AWS_ACCESS_KEY_ID as AWS_KEY
+from tests.helpers import GITHUB_TOKEN, PRIVATE_KEY_HEADER
 
 
 def pattern_rules(source: str, suffix: str = ".js") -> set[str]:
@@ -120,7 +122,11 @@ def test_a_prepared_statement_is_not_reported() -> None:
 
 
 def test_php_command_execution_is_reported() -> None:
-    assert "PH001" in pattern_rules("<?php system($_GET['cmd']); ?>", ".php")
+    assert "PH001" in pattern_rules("<?php system($command); ?>", ".php")
+
+
+def test_php_shell_exec_with_a_variable_is_reported() -> None:
+    assert "PH001" in pattern_rules("<?php shell_exec($userInput); ?>", ".php")
 
 
 def test_php_escaped_argument_is_still_reported_but_literal_is_not() -> None:
@@ -145,21 +151,21 @@ def test_rules_do_not_apply_to_other_languages() -> None:
 
 
 def test_an_aws_key_is_reported_and_redacted() -> None:
-    findings = analyze_secrets("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n", ".env")
+    findings = analyze_secrets(f"AWS_ACCESS_KEY_ID={AWS_KEY}\n", ".env")
     assert [f.rule_id for f in findings] == ["SEC001"]
-    assert "AKIAIOSFODNN7EXAMPLE" not in findings[0].snippet
+    assert AWS_KEY not in findings[0].snippet
     assert "redacted" in findings[0].snippet
 
 
 def test_a_private_key_block_is_reported() -> None:
-    assert "SEC002" in secret_rules("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCA…\n")
+    assert "SEC002" in secret_rules(f"{PRIVATE_KEY_HEADER}\nMIIEpAIBAAKCA…\n")
 
 
 def test_a_github_token_is_reported_and_redacted() -> None:
-    line = "GITHUB_TOKEN=ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8\n"
-    findings = analyze_secrets(line, ".env")
+    findings = analyze_secrets(f"GITHUB_TOKEN={GITHUB_TOKEN}\n", ".env")
     assert findings[0].rule_id == "SEC003"
-    assert "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8" not in findings[0].snippet
+    assert GITHUB_TOKEN not in findings[0].snippet
+    assert GITHUB_TOKEN[4:] not in findings[0].snippet
 
 
 def test_a_database_url_with_a_password_is_reported() -> None:
@@ -199,6 +205,5 @@ def test_an_env_example_style_file_is_quiet() -> None:
 
 def test_one_line_produces_one_credential_finding() -> None:
     """A specific rule wins; the generic rule must not double-report."""
-    line = "AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\n"
-    rule_ids = [f.rule_id for f in analyze_secrets(line, ".env")]
+    rule_ids = [f.rule_id for f in analyze_secrets(f"AWS_SECRET_ACCESS_KEY={AWS_KEY}\n", ".env")]
     assert rule_ids == ["SEC001"]

@@ -9,6 +9,7 @@ and this one must not.
 import pytest
 
 from app.analysis.python_ast import analyze_python_source
+from tests.helpers import GITHUB_TOKEN
 
 
 def rules_for(source: str) -> set[str]:
@@ -98,11 +99,11 @@ def test_a_hardcoded_password_is_reported() -> None:
 
 
 def test_the_secret_value_is_never_stored() -> None:
-    findings = analyze_python_source("API_TOKEN = 'ghp_realtokenvalue1234567890'\n", "s.py")
+    findings = analyze_python_source(f"API_TOKEN = '{GITHUB_TOKEN}'\n", "s.py")
     secret_findings = [f for f in findings if f.rule_id == "PY006"]
     assert secret_findings, "the finding must exist"
     for finding in secret_findings:
-        assert "ghp_realtokenvalue1234567890" not in finding.snippet
+        assert GITHUB_TOKEN not in finding.snippet
         assert "redacted" in finding.snippet
 
 

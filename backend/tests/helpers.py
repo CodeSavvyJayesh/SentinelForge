@@ -1,9 +1,24 @@
-"""Test helpers."""
+"""Test helpers.
+
+Includes the credential-shaped fixtures the analysis tests need. They are
+assembled from fragments rather than written out as literals: a file that
+contains a real-shaped AWS key id, a live-looking GitHub token and a PHP
+webshell one-liner is a file that antivirus quarantines. That is not
+hypothetical — it happened on a Windows machine during Phase 5, and it took the
+entire test run down with it, because pytest could no longer read the file.
+
+The strings are identical at runtime. They simply do not exist as literals on
+disk, so a signature scanner has nothing to match.
+"""
 
 from alembic import command
 from alembic.config import Config
 
 from app.core.config import BACKEND_DIR
+
+AWS_ACCESS_KEY_ID = "AKIA" + "IOSFODNN7EXAMPLE"
+GITHUB_TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
 
 
 def alembic_config() -> Config:

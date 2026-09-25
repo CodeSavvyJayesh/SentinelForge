@@ -6,6 +6,7 @@ import pytest
 
 from app.analysis.engine import analyze_workspace
 from app.core.config import Settings, get_settings
+from tests.helpers import AWS_ACCESS_KEY_ID, GITHUB_TOKEN
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def test_it_finds_issues_across_languages(tmp_path: Path, settings: Settings) ->
     write(tmp_path, "app/main.py", "import os\nos.system(command)\n")
     write(tmp_path, "web/app.js", "const out = eval(userInput);\n")
     write(tmp_path, "srv/Main.java", 'MessageDigest.getInstance("MD5");\n')
-    write(tmp_path, ".env", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
+    write(tmp_path, ".env", f"AWS_ACCESS_KEY_ID={AWS_ACCESS_KEY_ID}\n")
 
     result = analyze_workspace(tmp_path, settings)
 
@@ -104,7 +105,7 @@ def test_secrets_are_still_found_in_a_file_that_does_not_parse(
     tmp_path: Path, settings: Settings
 ) -> None:
     """A committed key is a committed key whether or not the file compiles."""
-    write(tmp_path, "broken.py", "def broken(:\nAWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n")
+    write(tmp_path, "broken.py", f"def broken(:\nAWS_KEY = '{AWS_ACCESS_KEY_ID}'\n")
 
     result = analyze_workspace(tmp_path, settings)
 
@@ -160,7 +161,7 @@ def test_symlinks_are_not_followed(tmp_path: Path, settings: Settings) -> None:
 
 def test_duplicate_findings_are_collapsed(tmp_path: Path, settings: Settings) -> None:
     """The same line, found by two analysers, is one finding."""
-    write(tmp_path, "config.py", "API_KEY = 'ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'\n")
+    write(tmp_path, "config.py", f"API_KEY = '{GITHUB_TOKEN}'\n")
 
     result = analyze_workspace(tmp_path, settings)
 

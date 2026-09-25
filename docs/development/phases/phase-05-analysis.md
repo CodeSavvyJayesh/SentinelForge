@@ -18,7 +18,7 @@ project page says so rather than showing an empty scan history.
 | Database | 1 migration (`a7be837ea618`): `findings`, plus `repositories.analyzed_at` |
 | Rules | 32 across Python AST, patterns and secrets |
 | Endpoints | analyse, list findings, get finding |
-| Backend tests | 120 new (348 total) |
+| Backend tests | 121 new (349 total) |
 | Frontend | findings panel per repository; 5 new tests (56 total) |
 | Docs | this report, `security/analysis.md`, API conventions, architecture, README |
 
@@ -141,6 +141,41 @@ growing more lookaheads.
 
 ---
 
+## 7b. Antivirus quarantined a test file
+
+The first Windows run of this phase failed in a way nothing on Linux could have
+predicted: **Windows Defender quarantined
+`tests/unit/test_pattern_and_secret_rules.py`**, and pytest then could not read
+it — `OSError: [Errno 22]`, with the whole run aborting at collection.
+
+The trigger was one fixture:
+
+```php
+<?php system($_GET['cmd']); ?>
+```
+
+which is the canonical PHP webshell one-liner and matches a Defender backdoor
+signature exactly. The file also held a real-shaped AWS key id, a live-looking
+GitHub token and a private-key header — individually fine, collectively a file
+that looks like a malware sample, because that is precisely what a security
+scanner's fixtures *are*.
+
+The fix keeps the tests doing the same work:
+
+- The PHP fixtures exercise the rule (`system($command)`, `shell_exec($userInput)`)
+  without reproducing the signature.
+- Credential-shaped fixtures live in `tests/helpers.py` and are **assembled
+  from fragments** — identical at runtime, absent as literals on disk, so a
+  signature scanner has nothing to match.
+- The file was renamed to `test_language_rules.py`, because a path an antivirus
+  has already judged stays judged.
+
+This is a permanent constraint for a project of this kind, not a one-off: any
+tool that detects dangerous code needs examples of dangerous code in its tests,
+and those examples live on a developer's machine.
+
+---
+
 ## 8. Data model
 
 `findings`, one row per claim:
@@ -188,7 +223,7 @@ Three deliberate choices:
 
 | Check | Result |
 | --- | --- |
-| `pytest` — 348 tests (120 new) against real PostgreSQL | ✅ pass |
+| `pytest` — 349 tests (121 new) against real PostgreSQL and on Windows | ✅ pass |
 | `ruff check` / `ruff format --check` | ✅ pass |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | ✅ pass |
 | Frontend type-check (strict), ESLint (React Compiler rules), 56 tests | ✅ pass |
@@ -279,3 +314,4 @@ still said "nothing is analysed yet", which stopped being true this phase.
 8. Why is "0 findings" refused for a repository whose workspace is missing?
 9. Why does the severity filter not change the counts shown on the filter chips?
 10. Which twenty controls were broken to check the tests, and why is a passing security test with the control removed worthless?
+11. Why did antivirus quarantine a test file, and what does that imply for any security tool's test fixtures?
