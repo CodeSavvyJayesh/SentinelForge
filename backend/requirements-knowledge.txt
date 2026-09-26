@@ -9,4 +9,9 @@
 #
 # fastembed runs the model on the CPU through onnxruntime. sentence-transformers
 # would give the same vectors and bring PyTorch — about 2.5 GB — with it.
-fastembed
+#
+# Pinned like every other dependency: an embedding model is not a detail that
+# may drift between machines. A different version could ship a different default
+# revision of the weights, and vectors built by one would score meaninglessly
+# against a query embedded by the other.
+fastembed==0.8.1

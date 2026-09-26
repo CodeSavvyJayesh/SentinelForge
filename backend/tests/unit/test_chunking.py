@@ -117,3 +117,31 @@ def test_section_boundaries_cannot_be_forged_by_the_text() -> None:
     first = document(("AB", "C")).content_hash
     second = document(("A", "BC")).content_hash
     assert first != second
+
+
+def test_the_heading_comes_out_of_the_budget_not_on_top_of_it() -> None:
+    """Prefixing the title after the split is the obvious way to write this, and
+    it silently pushed 198 passages of the real CWE catalogue over the limit —
+    where the embedder truncates rather than complains."""
+    long_title = SourceDocument(
+        source=KnowledgeSource.CWE,
+        external_id="CWE-1",
+        title="CWE-1: " + "A very long weakness name " * 6,
+        sections=[Section(name="Mitigations", text="word " * 400)],
+    )
+    chunks = chunk_document(long_title, max_chars=600)
+    assert chunks
+    assert all(len(chunk.text) <= 600 for chunk in chunks)
+
+
+def test_a_title_longer_than_the_budget_still_leaves_room_for_text() -> None:
+    """Otherwise the floor is the only thing between us and one-word passages."""
+    absurd = SourceDocument(
+        source=KnowledgeSource.CWE,
+        external_id="CWE-2",
+        title="T" * 500,
+        sections=[Section(name="Mitigations", text="word " * 200)],
+    )
+    chunks = chunk_document(absurd, max_chars=300)
+    body = chunks[0].text.split("\n", 1)[1]
+    assert len(body) >= 150

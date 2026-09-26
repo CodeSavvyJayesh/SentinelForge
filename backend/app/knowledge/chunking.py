@@ -29,6 +29,12 @@ PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
 # long paragraph, not to be right about every abbreviation.
 SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
 
+# The smallest amount of actual text a passage may carry once its heading has
+# been accounted for. Only reached by a title long enough to eat the whole
+# budget, and it exists so that case degrades into a slightly over-long passage
+# rather than into one-word passages that mean nothing.
+MIN_TEXT_BUDGET = 200
+
 
 @dataclass(frozen=True)
 class Section:
@@ -172,11 +178,19 @@ def chunk_document(document: SourceDocument, *, max_chars: int) -> list[Chunk]:
     queries" does not say what it is about, and its vector would sit next to
     every other piece of generic advice; with "CWE-89: SQL Injection —
     Mitigations" in front of it, the passage carries its own subject.
+
+    The heading comes out of the *same* budget as the text, not on top of it.
+    Prefixing after the split is the obvious way to write this and it is wrong:
+    a long CWE title would push nearly two hundred passages of the real
+    catalogue past the limit they are supposed to respect, silently, since the
+    embedder truncates rather than complains. A floor keeps a pathologically
+    long title from squeezing the text down to nothing.
     """
     chunks: list[Chunk] = []
     for section in document.sections:
-        for text in split_text(section.text, max_chars):
-            heading = f"{document.title} — {section.name}"
+        heading = f"{document.title} — {section.name}"
+        budget = max(MIN_TEXT_BUDGET, max_chars - len(heading) - 1)
+        for text in split_text(section.text, budget):
             chunks.append(
                 Chunk(ordinal=len(chunks), section=section.name, text=f"{heading}\n{text}")
             )
