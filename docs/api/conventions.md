@@ -205,6 +205,40 @@ vulnerability, and this is a statement about the installation. The same code is
 returned when the stored vectors came from a different embedding model than the
 one configured, because their scores cannot be compared.
 
+## Risk
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/repositories/{id}/risk` | Bearer | the current score, with the arithmetic behind it |
+| `GET /api/v1/repositories/{id}/risk/history` | Bearer | one point per completed scan, oldest first |
+
+Both are cheap reads — the score is arithmetic over findings already in the
+database, which is why there is no queue here and no worker.
+
+```json
+{"repository_id": 4, "score": 52.4, "grade": "D", "policy_version": 1,
+ "finding_count": 18, "counts_by_severity": {"CRITICAL": 3, "HIGH": 10},
+ "top": [
+   {"finding_id": 33, "score": 13.6, "base": 40.0,
+    "explanation": "40 base × 0.8 confidence × 0.4 test path × 1.06 age = 13.6",
+    "factors": [
+      {"name": "confidence", "value": 0.8, "reason": "MEDIUM confidence that this is a real match"},
+      {"name": "test path", "value": 0.4, "reason": "in test or fixture code"}
+    ]}
+ ]}
+```
+
+`factors` and `explanation` are the point of the endpoint, not decoration. A
+score a reviewer cannot take apart is one they can only accept or ignore.
+
+`policy_version` is on every score and every history point. Two scores produced
+by different policies are not two points on the same line, and a client that
+plots them together should be able to tell.
+
+History omits scans that carry no score rather than sending zero — they ran
+before this scoring existed, and a zero would draw an improvement that never
+happened.
+
 ## Explanations
 
 | Endpoint | Auth | Notes |

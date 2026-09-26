@@ -1373,3 +1373,148 @@ a.button {
   line-height: 1.5;
   color: var(--color-text-muted);
 }
+
+/* ---------- Risk (Phase 9) ---------- */
+
+.risk {
+  margin: var(--space-4) 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-raised);
+  padding: var(--space-3);
+}
+
+.risk__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.risk__grade {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 2px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.risk__grade--a { color: var(--color-ok); }
+.risk__grade--b { color: var(--color-accent); }
+.risk__grade--c { color: #fbbf24; }
+.risk__grade--d { color: #fb923c; }
+.risk__grade--f { color: var(--color-fail); }
+
+.risk__headline {
+  flex: 1 1 12rem;
+}
+
+.risk__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.risk__of {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.risk__label {
+  margin: 2px 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* Down is good here: risk falling is the improvement. */
+.risk__down { color: var(--color-ok); }
+.risk__up { color: var(--color-fail); }
+
+.risk__trend {
+  margin-top: var(--space-3);
+}
+
+.risk__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.risk__bars li {
+  flex: 1 1 auto;
+  min-width: 4px;
+  max-width: 24px;
+  background: var(--color-accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.75;
+}
+
+.risk__bars li:last-child {
+  opacity: 1;
+}
+
+.risk__trend-label,
+.risk__note {
+  margin: var(--space-2) 0 0;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+.risk__working {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.risk__top {
+  margin: var(--space-2) 0 0;
+  padding: 0 0 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+}
+
+.risk__top-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.risk__top-title {
+  flex: 1 1 8rem;
+}
+
+.risk__top-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.risk__sum {
+  margin: var(--space-2) 0 0;
+  font-size: 0.75rem;
+}
+
+.risk__factors {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.risk__factor-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}

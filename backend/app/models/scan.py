@@ -20,7 +20,7 @@ QUEUED ──claimed──> RUNNING ──┬──> COMPLETED
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, Text
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
@@ -91,6 +91,15 @@ class Scan(TimestampMixin, Base):
         Integer, default=0, server_default="0", nullable=False
     )
     truncated: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+
+    # What the run judged the repository to be worth worrying about (Phase 9).
+    # Frozen here rather than recomputed, for the same reason as the counts
+    # above: a history row has to keep the number it produced. The policy
+    # version travels with it, because a score from one policy and a score from
+    # another are not points on the same line.
+    risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_grade: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    risk_policy_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Set only when status is FAILED; safe to show the owner.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
