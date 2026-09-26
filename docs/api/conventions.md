@@ -168,6 +168,43 @@ A rejected upload or clone still leaves a row with `status: "FAILED"` and a
 safe `error_message`, so the attempt is visible instead of silently vanishing.
 The workspace is deleted in that case.
 
+## Security knowledge
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/findings/{id}/knowledge` | Bearer | reference material explaining one finding |
+| `GET /api/v1/knowledge/status` | Bearer | whether the knowledge base has been built, and from what |
+
+Both are reads. The knowledge base is built by `scripts/build_knowledge.py` from
+files on disk — there is deliberately no endpoint that triggers indexing, since
+it costs minutes of CPU and would let a caller put arbitrary text into the
+advice every user sees.
+
+Each passage says where it came from and **why it was retrieved**:
+
+```json
+{"finding_id": 41, "rule_id": "JV003", "cwe_id": "CWE-327",
+ "query": "Weak hash algorithm (MD5 or SHA-1) CWE-327 in Java",
+ "passages": [
+   {"source": "SENTINELFORGE", "external_id": "JV003", "section": "Fix",
+    "matched_by": "rule", "score": 0.81, "url": null,
+    "text": "Change the algorithm string to \"SHA-256\"..."},
+   {"source": "CWE", "external_id": "CWE-327", "section": "Mitigations",
+    "matched_by": "cwe", "score": 0.74,
+    "url": "https://cwe.mitre.org/data/definitions/327.html", "text": "..."}
+ ]}
+```
+
+`matched_by` is `rule`, `cwe`, `owasp` or `semantic`, most specific first. A
+reader is entitled to know whether a passage was written for this exact rule or
+merely scored well against a vector.
+
+An installation with no knowledge base answers **503 `KNOWLEDGE_BASE_NOT_BUILT`**
+rather than an empty list: "no passages" reads as a statement about the
+vulnerability, and this is a statement about the installation. The same code is
+returned when the stored vectors came from a different embedding model than the
+one configured, because their scores cannot be compared.
+
 ## Scans
 
 | Endpoint | Auth | Notes |

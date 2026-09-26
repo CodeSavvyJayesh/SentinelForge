@@ -120,6 +120,32 @@ class Settings(BaseSettings):
     # repository that crashes the analyser from being retried forever.
     SCAN_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
 
+    # --- Security knowledge base (Phase 7) ---------------------------------
+    # The local embedding model. bge-small-en-v1.5 is 384 dimensions and about
+    # 130 MB; it runs on the CPU through ONNX, with no PyTorch. Changing the
+    # model means rebuilding the knowledge base — vectors from two different
+    # models cannot be compared, and retrieval refuses to try.
+    KNOWLEDGE_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    KNOWLEDGE_EMBEDDING_DIMENSIONS: int = Field(default=384, ge=8, le=4096)
+    # Where the model file is cached. Set explicitly so it lands somewhere the
+    # project owns rather than in a surprise directory under the home folder.
+    KNOWLEDGE_MODEL_CACHE_DIR: str = str(BACKEND_DIR / "models")
+    # Where the downloaded CWE catalogue and OWASP text are read from. Only the
+    # builder script touches this; the running API never does.
+    KNOWLEDGE_SOURCE_DIR: str = str(BACKEND_DIR.parent / "knowledge-sources")
+
+    # How many passages a finding's explanation is built from. More context is
+    # not better: Phase 8 has a token budget, and the fifth-best passage about a
+    # weakness is usually about a different weakness.
+    KNOWLEDGE_RETRIEVAL_LIMIT: int = Field(default=5, ge=1, le=20)
+    # Applied only when topping up from outside the finding's own CWE. Passages
+    # that *are* about this CWE are kept whatever they score; passages pulled in
+    # from the wider corpus have to earn it.
+    KNOWLEDGE_MIN_SIMILARITY: float = Field(default=0.35, ge=0.0, le=1.0)
+    # A passage longer than this is split. Long enough to hold a whole
+    # mitigation, short enough that its embedding is about one idea.
+    KNOWLEDGE_MAX_CHUNK_CHARS: int = Field(default=1200, ge=200, le=8000)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

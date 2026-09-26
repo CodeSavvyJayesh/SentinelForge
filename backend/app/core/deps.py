@@ -19,10 +19,12 @@ from app.core.security import (
     csrf_tokens_match,
     decode_access_token,
 )
+from app.knowledge.embedder import Embedder, build_embedder
 from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
+from app.services.knowledge_service import KnowledgeService
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import ScanService
@@ -92,6 +94,46 @@ def get_scan_service(db: DbSession, settings: AppSettings) -> ScanService:
 
 
 ScanServiceDep = Annotated[ScanService, Depends(get_scan_service)]
+
+
+class _EmbedderHolder:
+    """One embedding model per process, loaded on first use.
+
+    The model is roughly 130 MB of weights and takes a second or two to
+    initialise. Building it per request would make the first knowledge lookup
+    after every request pay that cost; building it at import time would make the
+    API refuse to start on a machine where the knowledge base is not used at
+    all. So: one instance, created the first time something asks for it, and the
+    model file itself is loaded lazily inside that.
+    """
+
+    _embedder: Embedder | None = None
+
+    @classmethod
+    def get(cls, settings: Settings) -> Embedder:
+        if cls._embedder is None:
+            cls._embedder = build_embedder(settings)
+        return cls._embedder
+
+    @classmethod
+    def reset(cls) -> None:
+        cls._embedder = None
+
+
+def get_embedder(settings: AppSettings) -> Embedder:
+    return _EmbedderHolder.get(settings)
+
+
+EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
+
+
+def get_knowledge_service(
+    db: DbSession, settings: AppSettings, embedder: EmbedderDep
+) -> KnowledgeService:
+    return KnowledgeService(db, settings, embedder)
+
+
+KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
 
 
 def get_current_user(

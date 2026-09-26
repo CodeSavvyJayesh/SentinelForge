@@ -39,3 +39,10 @@ Claude outputs/
 
 # Ingested repositories (Phase 4): user code, never committed
 backend/workspaces/
+
+# Knowledge sources (Phase 7): MITRE's and OWASP's published files, downloaded
+# rather than vendored — they have their own licences and their own release
+# cadence, and a 10 MB catalogue does not belong in this history.
+knowledge-sources/
+# The embedding model, downloaded once and cached on first use.
+backend/models/

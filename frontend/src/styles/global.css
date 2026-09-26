@@ -1190,3 +1190,91 @@ a.button {
     max-width: none;
   }
 }
+
+/* ---------- Security knowledge (Phase 7) ---------- */
+
+.knowledge {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.knowledge__heading {
+  margin: 0 0 var(--space-3);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-text);
+}
+
+.knowledge__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge__item {
+  border-left: 2px solid var(--color-border);
+  padding-left: var(--space-3);
+}
+
+/* Our own writing is marked out from a standards body's, in the border as well
+   as in the badge, so the distinction survives a quick scan of the page. */
+.knowledge__item--sentinelforge {
+  border-left-color: var(--color-accent);
+}
+
+.knowledge__attribution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.source-tag {
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-2);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.source-tag--sentinelforge {
+  color: var(--color-accent);
+}
+
+.knowledge__section {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.knowledge__match::before {
+  content: '·';
+  margin-right: var(--space-2);
+}
+
+.knowledge__text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.knowledge__empty,
+.knowledge__query {
+  margin: var(--space-3) 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.knowledge__query code {
+  word-break: break-word;
+}
