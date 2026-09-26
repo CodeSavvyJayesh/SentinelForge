@@ -164,6 +164,6 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Scan orchestration, background worker, finding lifecycle | Implemented (Phase 6) |
 | Security knowledge base: local CWE/OWASP index, retrieval per finding | Implemented (Phase 7) — see [security/knowledge.md](../security/knowledge.md) |
 | Local LLM explanation of findings, grounded in the knowledge base | Implemented (Phase 8) — see [security/llm.md](../security/llm.md) |
-| Risk engine | Phase 9 |
+| Deterministic risk scoring with per-factor explanations | Implemented (Phase 9) |
 | Patch generation & validation | Phases 10–11 |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |

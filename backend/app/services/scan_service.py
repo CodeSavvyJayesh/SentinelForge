@@ -43,6 +43,7 @@ from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.finding_repository import FindingRepository
 from app.repositories.repository_repository import RepositoryRepository
 from app.repositories.scan_repository import ScanRepository
+from app.risk.scoring import aggregate
 from app.services.auth_service import RequestContext
 from app.services.repository_service import RepositoryNotFoundError
 
@@ -165,6 +166,15 @@ class ScanService:
             scan.total_findings = counts.total
             scan.new_findings = counts.new
             scan.fixed_findings = counts.fixed
+
+            # Phase 9: freeze what this run judged the repository to be worth
+            # worrying about. Computed here, at the end of the run, from the
+            # findings as they now stand — so the number belongs to the scan
+            # rather than to whenever somebody next opens the page.
+            risk = aggregate(self.findings.list_all(repository.id))
+            scan.risk_score = risk.score
+            scan.risk_grade = risk.grade
+            scan.risk_policy_version = risk.policy_version
             repository.analyzed_at = started
             self._finish(scan, started)
             self._record(
@@ -175,6 +185,8 @@ class ScanService:
                     "total": counts.total,
                     "new": counts.new,
                     "fixed": counts.fixed,
+                    "risk_score": risk.score,
+                    "risk_grade": risk.grade,
                 },
             )
             logger.info(
@@ -185,6 +197,8 @@ class ScanService:
                     "total_findings": counts.total,
                     "new_findings": counts.new,
                     "fixed_findings": counts.fixed,
+                    "risk_score": risk.score,
+                    "risk_grade": risk.grade,
                     "duration_ms": scan.duration_ms,
                 },
             )

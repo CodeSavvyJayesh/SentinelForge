@@ -5,6 +5,7 @@ import { FindingExplanation } from './FindingExplanation'
 import { FindingKnowledge } from './FindingKnowledge'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
+import { RiskSummary } from './RiskSummary'
 import { ScanHistory } from './ScanHistory'
 import { analysisService, scanService } from '../services/api'
 import { SCAN_POLL_INTERVAL_MS } from '../services/scanService'
@@ -178,6 +179,11 @@ export function FindingsPanel({ repositoryId, analyzedAt, onScanned }: FindingsP
           requestId={queueError.requestId}
         />
       )}
+
+      {/* The score sits above the list: a reader should meet the summary before
+          the eighteen rows it summarises. `reloads` ties it to the scan, so a
+          finished scan refreshes the score with the findings. */}
+      {analyzedAt && <RiskSummary repositoryId={repositoryId} reloadKey={reloads} />}
 
       {state.status === 'error' && (
         <ErrorState

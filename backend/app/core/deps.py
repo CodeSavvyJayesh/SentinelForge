@@ -29,6 +29,7 @@ from app.services.explanation_service import ExplanationService
 from app.services.knowledge_service import KnowledgeService
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
+from app.services.risk_service import RiskService
 from app.services.scan_service import ScanService
 
 UNAUTHENTICATED_HEADERS = {"WWW-Authenticate": "Bearer"}
@@ -96,6 +97,13 @@ def get_scan_service(db: DbSession, settings: AppSettings) -> ScanService:
 
 
 ScanServiceDep = Annotated[ScanService, Depends(get_scan_service)]
+
+
+def get_risk_service(db: DbSession, settings: AppSettings) -> RiskService:
+    return RiskService(db, settings)
+
+
+RiskServiceDep = Annotated[RiskService, Depends(get_risk_service)]
 
 
 class _EmbedderHolder:
