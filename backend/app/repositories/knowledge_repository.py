@@ -87,6 +87,13 @@ class KnowledgeRepository:
         Returns nothing when no identifier is given — the caller then falls back
         to an unrestricted search rather than being handed the entire corpus by
         accident.
+
+        **A rule note is only ever a candidate for its own rule.** Our notes are
+        written per rule and per language, so the note for JS005 is JavaScript
+        advice; a Java finding shares its CWE with it and would otherwise pull
+        it in. Showing "use crypto.createHash" to someone looking at a .java
+        file is worse than showing nothing, and the CWE catalogue already
+        carries the language-neutral version of the same advice.
         """
         conditions = []
         if cwe_id:
@@ -99,19 +106,32 @@ class KnowledgeRepository:
             return []
 
         statement = select(KnowledgeChunk).where(
-            KnowledgeChunk.embedding.is_not(None), or_(*conditions)
+            KnowledgeChunk.embedding.is_not(None),
+            or_(*conditions),
+            # Catalogue text has no rule_id and is unaffected by this.
+            or_(KnowledgeChunk.rule_id.is_(None), KnowledgeChunk.rule_id == rule_id),
         )
         return list(self.db.scalars(statement))
 
-    def iter_embedded(self, *, exclude_ids: set[int] | None = None) -> Iterator[KnowledgeChunk]:
+    def iter_embedded(
+        self, *, exclude_ids: set[int] | None = None, rule_id: str | None = None
+    ) -> Iterator[KnowledgeChunk]:
         """Stream the whole embedded corpus, for the unrestricted fallback.
 
         Streamed rather than listed because each row carries a vector; pulling a
         few thousand of them into memory at once to score them one at a time is
-        a cost with no benefit. This path runs only when the identifier filter
-        came back short, which for a finding with a known CWE is never.
+        a cost with no benefit.
+
+        Other rules' notes are excluded here too. "A note is only retrieved for
+        its own rule" has to hold on every path or it does not hold: the first
+        version filtered them out of the candidate set and let them straight
+        back in through this one, which is exactly where the Python note for a
+        Java finding reappeared.
         """
-        statement = select(KnowledgeChunk).where(KnowledgeChunk.embedding.is_not(None))
+        statement = select(KnowledgeChunk).where(
+            KnowledgeChunk.embedding.is_not(None),
+            or_(KnowledgeChunk.rule_id.is_(None), KnowledgeChunk.rule_id == rule_id),
+        )
         if exclude_ids:
             statement = statement.where(KnowledgeChunk.id.not_in(exclude_ids))
         yield from self.db.scalars(statement).yield_per(256)

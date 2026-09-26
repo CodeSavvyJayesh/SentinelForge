@@ -182,8 +182,9 @@ query is printed underneath, so a result can be reproduced and argued with.
 | `ruff check` / `ruff format --check` | ✅ pass |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | ✅ pass |
 | Frontend type-check (strict), ESLint (React Compiler rules), 63 tests | ✅ pass |
-| Parsing the **real** MITRE catalogue | ⏳ pending — see below |
-| Retrieval quality with the **real** model | ⏳ pending — see below |
+| Parsing the **real** MITRE catalogue — 944 weaknesses, version 4.20 | ✅ pass |
+| Retrieval quality with the **real** model — 6/6 cases | ✅ pass (after two fixes) |
+| `verify.ps1` on Windows — 474 passed, 6 skipped | ✅ pass |
 
 ### Do the controls bite?
 
@@ -206,30 +207,49 @@ Two survivors in the first pass were real gaps, and both were worth finding:
 
 And one control was deleted rather than tested, as described in §6.
 
-### What is still unverified
+### What the real run found
 
-Two claims cannot be checked from the build environment, and are not being
-marked as passing until they are:
+Both claims that could not be checked from the build environment are now
+closed, and closing them cost three defects — which is the argument for
+insisting on it rather than shipping on green unit tests.
 
-1. **The CWE parser has never met a real catalogue.** It is tested against
-   hand-written XML, including hostile XML. That proves the security controls
-   and the shape of the parse; it does not prove MITRE's actual file parses.
-2. **Retrieval quality has only been checked with a stub embedder** — a
-   deterministic bag-of-words stand-in that discriminates well enough to make
-   ranking tests fail when ranking breaks, but is not a sentence model.
+**Parsing the real catalogue** (CWE 4.20, 944 weaknesses, every CWE the rules
+map to present) immediately exposed a bug the fixtures could not: the document
+title was prefixed onto a passage *after* the text had been split to the size
+limit, so a long CWE name pushed 198 passages past it. Nothing complained,
+because an embedder truncates an over-long input rather than refusing it — those
+passages would have been indexed with their tails missing. The heading now comes
+out of the same budget. The corpus is 976 documents and 4,093 passages.
 
-Both are closed by running, on a machine with the sources and the model:
+**The first real retrieval run scored 5/6**, and the failure was worth more than
+the five passes. For a Java finding about MD5:
 
-```powershell
-python scripts\build_knowledge.py
-python scripts\check_retrieval.py
+```
++0.898  [cwe ] JS005 — Risk     <- JavaScript advice, first
++0.864  [rule] JV003 — Risk     <- the Java note, second
++0.830  [cwe ] PY007 — Risk     <- Python advice, third
+! no remediation section in the top 3
 ```
 
-`check_retrieval.py` puts six findings whose correct answer is not in dispute to
-the real model against the real index, prints what comes back, and exits
-non-zero if any of them misses. It is a script rather than a test because it
-needs two things a test must never depend on: a model installed, and a knowledge
-base somebody built.
+Two distinct defects in one result:
+
+1. **Another language's advice outranked the right one**, by three hundredths of
+   a point. Small embedding models represent a passage's *topic* well and its
+   *qualifiers* poorly, so "in Java" in the query barely moved the score. The
+   fix is not to fight the model: which rule the finding came from is a fact we
+   already hold, so notes are now restricted to their own rule and ranking is
+   tiered by specificity before score.
+2. **Three restatements of the problem, no remediation.** The query is built
+   from a finding, so it is a description of a problem and embeds closest to
+   other descriptions of that problem. Similarity was faithfully returning what
+   was asked for, and what was asked for was wrong. One slot is now reserved for
+   a section that explains how to fix the weakness.
+
+The second is the more interesting failure, because nothing was broken. Every
+component did its job and the answer was still useless to the person reading it.
+
+After both fixes, all six cases lead with the finding's own rule note — risk and
+fix — followed by catalogue text, with no cross-language passages at all.
 
 ---
 
@@ -239,10 +259,9 @@ base somebody built.
   section-aware chunking, the embedder layer with its three refusals, vector
   storage and exact similarity, filter-first retrieval, the two endpoints, the
   builder CLI, the retrieval-check script, the UI panel, documentation.
-- **REMAINING (yours):** download the sources, `pip install -r
-  requirements-knowledge.txt`, `alembic upgrade head`, `scripts\verify.ps1`,
-  then `build_knowledge.py` and `check_retrieval.py`; report the `fastembed`
-  version so it can be pinned like every other dependency.
+- **REMAINING (yours):** the OWASP Top 10 files, whose English copies live in
+  `2021/docs/en` rather than `2021/docs`; rebuild afterwards, which costs
+  seconds because the catalogue hashes match and is skipped.
 - **Deferred on purpose:** an ANN index or pgvector (documented as the scale-out
   path, not pretended away), re-ranking, retrieval over the user's own code
   (that is a different index with different privacy rules), and any generation
@@ -258,12 +277,14 @@ base somebody built.
 ## 12. Study checklist
 
 1. Why does the retrieval filter on CWE and rule *before* it ranks anything — and what does the decoy test prove?
-2. Why are vectors normalised when they are stored rather than when they are compared?
-3. What breaks if a knowledge base is half-embedded by one model and half by another, and how does the code notice?
-4. Why does an unbuilt knowledge base return 503 instead of an empty list?
-5. Why is a `DOCTYPE` refused outright instead of limiting entity expansion?
-6. Why are namespaces stripped from the CWE XML rather than matched?
-7. Why is the code snippet deliberately excluded from the retrieval query?
-8. Why is the knowledge base built by a script rather than by an endpoint?
-9. Why is the content hash written *after* the passages, and what would break if it were written first?
-10. One control was deleted during verification rather than tested. Which, and why is deleting it the right answer?
+2. Why is the result ordered by specificity before similarity, and why is that not a workaround for a weak model?
+3. The first real run returned three passages that were all correct and all useless. Why, and what fixed it?
+4. Why are vectors normalised when they are stored rather than when they are compared?
+5. What breaks if a knowledge base is half-embedded by one model and half by another, and how does the code notice?
+6. Why does an unbuilt knowledge base return 503 instead of an empty list?
+7. Why is a `DOCTYPE` refused outright instead of limiting entity expansion?
+8. Why are namespaces stripped from the CWE XML rather than matched?
+9. Why is the code snippet deliberately excluded from the retrieval query?
+10. Why is the knowledge base built by a script rather than by an endpoint?
+11. Why is the content hash written *after* the passages, and what would break if it were written first?
+12. One control was deleted during verification rather than tested. Which, and why is deleting it the right answer?

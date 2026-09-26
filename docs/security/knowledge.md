@@ -95,6 +95,19 @@ A single unreadable vector is different: it is logged, skipped, and the other
 passages are still returned. A corrupt row is a builder problem; losing the
 whole explanation of a vulnerability over it would be a worse one.
 
+## Whose advice is shown
+
+SentinelForge's own notes are written per rule and per language. JS005 and
+JV003 are the same weakness — a broken hash — in JavaScript and Java, so they
+share CWE-327, and a CWE filter alone pulls both in. Handing a Java developer
+`crypto.createHash` is worse than handing them nothing, so **a note is only ever
+retrieved for the rule it was written for**, on every path including the
+unrestricted fallback. The CWE catalogue already carries the language-neutral
+form of the same advice, and it is not excluded.
+
+This is enforced in SQL rather than in ranking, because a rule that only holds
+"usually" is not a rule.
+
 ## Attribution
 
 Every passage carries its source, its identifier, its section and a link.

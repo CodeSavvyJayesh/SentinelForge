@@ -223,21 +223,123 @@ def test_a_rule_note_outranks_catalogue_text_for_the_same_finding(
     )
 
 
-def test_passages_come_back_in_descending_score_order(
+def test_passages_are_ordered_by_specificity_then_score(
     api_client: TestClient, db_session: Session, stub_embedder
 ) -> None:  # noqa: ANN001
+    """Specificity first, similarity second — and descending within each tier.
+
+    Pure score order was the first contract and it was wrong. On the real model
+    it put JavaScript advice above the Java note for a Java finding, by three
+    hundredths of a point: small embedding models read a passage's topic well
+    and its qualifiers poorly. Which rule a finding came from is not an estimate.
+    """
     token = sign_up(api_client, "kborder")
     repository = make_repository(api_client, db_session, token)
     finding = make_finding(db_session, repository.id)
     build_knowledge(db_session, stub_embedder, [*CORPUS, *notes.build_documents()])
 
-    scores = [
-        passage["score"]
-        for passage in api_client.get(
-            f"/api/v1/findings/{finding.id}/knowledge", headers=auth(token)
-        ).json()["passages"]
-    ]
-    assert scores == sorted(scores, reverse=True)
+    passages = api_client.get(
+        f"/api/v1/findings/{finding.id}/knowledge", headers=auth(token)
+    ).json()["passages"]
+
+    priority = {"rule": 0, "cwe": 1, "owasp": 2, "semantic": 3}
+    keys = [(priority[passage["matched_by"]], -passage["score"]) for passage in passages]
+    assert keys == sorted(keys)
+
+
+def test_another_languages_note_is_never_shown_for_this_finding(
+    api_client: TestClient, db_session: Session, stub_embedder
+) -> None:  # noqa: ANN001
+    """JV003 and JS005 are the same weakness in two languages, so they share a
+    CWE. Handing a Java developer "use crypto.createHash" is worse than handing
+    them nothing — and the catalogue already carries the language-neutral form.
+    """
+    token = sign_up(api_client, "kblang")
+    repository = make_repository(api_client, db_session, token)
+    finding = make_finding(db_session, repository.id)  # JV003, Java, CWE-327
+    build_knowledge(db_session, stub_embedder, [*CORPUS, *notes.build_documents()])
+
+    passages = api_client.get(
+        f"/api/v1/findings/{finding.id}/knowledge", headers=auth(token)
+    ).json()["passages"]
+
+    ours = [p for p in passages if p["source"] == "SENTINELFORGE"]
+    assert ours, "the rule's own note should still be retrieved"
+    assert {p["external_id"] for p in ours} == {"JV003"}
+    # JS005 and PY007 are also CWE-327 and must not appear.
+    assert not [p for p in passages if p["external_id"] in {"JS005", "PY007"}]
+
+
+def test_the_answer_always_contains_something_about_fixing_it(
+    api_client: TestClient, db_session: Session, stub_embedder
+) -> None:  # noqa: ANN001
+    """The query describes a problem, so it embeds closest to descriptions of
+    that problem. Left to similarity alone the first real run returned three
+    restatements of what the developer was already looking at.
+
+    Here the rule note is withheld and every catalogue section except the
+    mitigation one is made to look like the query, so similarity alone would
+    fill every slot with prose about the problem.
+    """
+    token = sign_up(api_client, "kbfix")
+    repository = make_repository(api_client, db_session, token)
+    finding = make_finding(db_session, repository.id)
+    problem_shaped = SourceDocument(
+        source=KnowledgeSource.CWE,
+        external_id="CWE-327",
+        title="CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+        sections=[
+            Section(name="Description", text="Weak hash algorithm MD5 SHA-1 collision broken Java"),
+            Section(
+                name="Consequences", text="Weak hash algorithm MD5 SHA-1 collision broken Java"
+            ),
+            Section(
+                name="Applicable platforms",
+                text="Weak hash algorithm MD5 SHA-1 collision broken Java",
+            ),
+            Section(name="Mitigations", text="Prefer SHA-256 from a maintained library."),
+        ],
+        cwe_id="CWE-327",
+    )
+    build_knowledge(db_session, stub_embedder, [problem_shaped])
+
+    passages = api_client.get(
+        f"/api/v1/findings/{finding.id}/knowledge", headers=auth(token)
+    ).json()["passages"]
+
+    assert any(passage["section"] == "Mitigations" for passage in passages)
+
+
+def test_the_reserved_slot_costs_at_most_one_position(
+    api_client: TestClient, db_session: Session, stub_embedder, monkeypatch
+) -> None:  # noqa: ANN001
+    """The guarantee displaces the weakest selected passage, not the best one.
+    A reservation that reordered the whole list would be the model's job taken
+    away rather than constrained."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "KNOWLEDGE_RETRIEVAL_LIMIT", 2)
+    token = sign_up(api_client, "kbslot")
+    repository = make_repository(api_client, db_session, token)
+    finding = make_finding(db_session, repository.id)
+    document = SourceDocument(
+        source=KnowledgeSource.CWE,
+        external_id="CWE-327",
+        title="CWE-327: Use of a Broken or Risky Cryptographic Algorithm",
+        sections=[
+            Section(name="Description", text="Weak hash algorithm MD5 SHA-1 collision broken Java"),
+            Section(name="Consequences", text="Weak hash algorithm MD5 SHA-1 broken"),
+            Section(name="Mitigations", text="Prefer SHA-256 from a maintained library."),
+        ],
+        cwe_id="CWE-327",
+    )
+    build_knowledge(db_session, stub_embedder, [document])
+
+    passages = api_client.get(
+        f"/api/v1/findings/{finding.id}/knowledge", headers=auth(token)
+    ).json()["passages"]
+
+    assert [passage["section"] for passage in passages] == ["Description", "Mitigations"]
 
 
 def test_the_owasp_category_is_a_filter_dimension_too(

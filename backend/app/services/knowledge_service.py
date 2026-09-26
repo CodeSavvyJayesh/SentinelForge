@@ -40,6 +40,15 @@ logger = get_logger("sentinelforge.knowledge")
 # Which language a finding is in, for the retrieval query. "How do I fix weak
 # hashing" and "how do I fix weak hashing in Java" retrieve different passages,
 # and the second question is the one the developer is actually asking.
+# How a passage was found, most specific first. Ordering by this before score
+# is what stops a near-tie in similarity from putting another language's advice
+# ahead of the note written for this exact rule.
+MATCH_PRIORITY: dict[str, int] = {"rule": 0, "cwe": 1, "owasp": 2, "semantic": 3}
+
+# Sections that answer "how do I fix this?" — the question a developer looking
+# at a finding is actually asking. One slot in the result is reserved for one.
+REMEDIATION_SECTIONS = frozenset({"Fix", "Mitigations"})
+
 LANGUAGE_BY_SUFFIX: dict[str, str] = {
     ".py": "Python",
     ".js": "JavaScript",
@@ -167,7 +176,8 @@ class KnowledgeService:
             rule_id=finding.rule_id,
             owasp_category=owasp_code(finding.owasp_category),
         )
-        passages = self._rank(candidates, vector, finding)[:limit]
+        ranked = self._rank(candidates, vector, finding)
+        passages = self._with_remediation(ranked[:limit], ranked)
 
         if len(passages) < limit:
             passages.extend(self._top_up(vector, finding, limit - len(passages), candidates))
@@ -229,8 +239,45 @@ class KnowledgeService:
                     matched_by=self._match_reason(chunk, finding),
                 )
             )
-        scored.sort(key=lambda passage: passage.score, reverse=True)
+        # Specificity first, similarity second. A passage written for *this*
+        # rule is not more relevant because it scores higher — it is more
+        # relevant because it was written for this rule, which is a fact rather
+        # than an estimate. The model decides the order within a tier.
+        #
+        # This is the same principle as the filter, applied one level further
+        # in, and it is not a workaround for a weak model: small embedding
+        # models capture a passage's topic well and its qualifiers poorly, so a
+        # query about weak hashing "in Java" scored JavaScript advice above the
+        # Java note by 0.03. Metadata we already hold answers that exactly.
+        scored.sort(key=lambda passage: (MATCH_PRIORITY[passage.matched_by], -passage.score))
         return scored
+
+    def _with_remediation(
+        self, selected: list[RetrievedPassage], ranked: list[RetrievedPassage]
+    ) -> list[RetrievedPassage]:
+        """Guarantee the answer contains something about fixing it.
+
+        The query is built from a finding, so it is a description of a problem —
+        and it therefore embeds closest to other descriptions of that problem.
+        Left to similarity alone the result is three restatements of what the
+        developer is already looking at, which is how the first real run came
+        back with "Risk, Risk, Risk".
+
+        So one slot is reserved: if nothing in the selection explains how to fix
+        the weakness and a candidate does, the weakest selected passage gives up
+        its place. Nothing is invented and nothing outranks a better match by
+        more than one position.
+        """
+        if not selected or any(
+            passage.chunk.section in REMEDIATION_SECTIONS for passage in selected
+        ):
+            return selected
+        chosen = {passage.chunk.id for passage in selected}
+        for passage in ranked:
+            if passage.chunk.id in chosen or passage.chunk.section not in REMEDIATION_SECTIONS:
+                continue
+            return [*selected[:-1], passage]
+        return selected
 
     def _top_up(
         self,
@@ -240,7 +287,8 @@ class KnowledgeService:
         already: list[KnowledgeChunk],
     ) -> list[RetrievedPassage]:
         exclude = {chunk.id for chunk in already}
-        scored = self._rank(self.knowledge.iter_embedded(exclude_ids=exclude), vector, finding)
+        corpus = self.knowledge.iter_embedded(exclude_ids=exclude, rule_id=finding.rule_id)
+        scored = self._rank(corpus, vector, finding)
         threshold = self.settings.KNOWLEDGE_MIN_SIMILARITY
         return [passage for passage in scored if passage.score >= threshold][:wanted]
 
