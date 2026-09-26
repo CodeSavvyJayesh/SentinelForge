@@ -10,6 +10,7 @@ asserts the message says which command to run.
 """
 
 import json
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -157,11 +158,36 @@ def test_an_oversized_response_is_refused(serving) -> None:  # noqa: ANN001
 # --- things that are not running ------------------------------------------
 
 
+def closed_port() -> int:
+    """A loopback port nothing is listening on.
+
+    Bound and released rather than hardcoded. Port 1 was the first attempt and
+    it is refused instantly on Linux and *times out* on Windows, where the
+    firewall drops rather than rejects — so the test passed at home and failed
+    on the machine this project is actually developed on, having never once
+    exercised the branch it was written for. A port the OS just handed back is
+    refused on both.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
 def test_a_refused_connection_names_the_command_that_fixes_it() -> None:
     """By far the most common failure: Ollama simply is not running."""
-    client = OllamaClient("http://127.0.0.1:1", model="m", timeout_seconds=2)
+    client = OllamaClient(f"http://127.0.0.1:{closed_port()}", model="m", timeout_seconds=5)
     with pytest.raises(LlmUnavailableError, match="ollama serve"):
         client.generate("prompt")
+
+
+def test_a_timeout_also_points_at_a_daemon_that_may_not_be_running() -> None:
+    """A connect timeout and a read timeout arrive here identically, and only
+    one of them is about a slow model. The message has to serve both, or the
+    Windows case sends somebody hunting a model that never started."""
+    message = str(LlmTimeoutError(30, "http://localhost:11434"))
+    assert "30 seconds" in message
+    assert "ollama serve" in message
+    assert "localhost:11434" in message
 
 
 def test_a_404_from_generate_means_the_model_is_not_installed(serving) -> None:  # noqa: ANN001

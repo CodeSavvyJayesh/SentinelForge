@@ -181,6 +181,7 @@ warning before the text it applies to, not after they have already believed it.
 | `ruff check` / `ruff format --check` | ✅ pass |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | ✅ pass |
 | Frontend type-check (strict), ESLint (React Compiler rules), 69 tests | ✅ pass |
+| `verify.ps1` on Windows — 544 passed, 6 skipped | ✅ pass (after one fix) |
 | End-to-end with the **real** model | ⏳ yours to run — see §10 |
 
 The model is faked at the client boundary in the test suite, and nothing else
@@ -221,6 +222,20 @@ fails with 0-based numbering, as it should.
 
 Three separate readers share that numbering, and it took two attempts to write a
 test that could see a shift in it.
+
+**And one test was passing without ever running the code it named.** The
+refused-connection test pointed at `127.0.0.1:1`. On Linux that is refused
+instantly, which is the branch under test. On Windows the firewall drops rather
+than rejects, so the connection times out — a different exception, a different
+branch, and a failure that only appeared on the machine this project is actually
+developed on. The port is now one the OS has just handed back and released,
+which is refused on both.
+
+That failure was worth more than the fix. A *connect* timeout and a *read*
+timeout arrive at the same handler and are not reliably distinguishable there,
+but only one of them is about a slow model — and the message said "the model did
+not respond", which would send somebody hunting a model that had never started.
+It now names the daemon and `ollama serve` as well, so it serves both cases.
 
 ---
 

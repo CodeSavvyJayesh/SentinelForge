@@ -68,8 +68,23 @@ class LlmUnavailableError(LlmError):
 
 
 class LlmTimeoutError(LlmError):
-    def __init__(self, seconds: int) -> None:
-        super().__init__(f"The model did not respond within {seconds} seconds.", code="LLM_TIMEOUT")
+    """Nothing came back in time.
+
+    The message covers both causes on purpose, because from here they are not
+    reliably distinguishable. A *read* timeout means the model is thinking too
+    slowly; a *connect* timeout means nothing is listening and the packets went
+    nowhere — and on Windows a connection to a dead port times out where on
+    Linux the same connection is refused instantly. Saying only "the model did
+    not respond" would send somebody looking at a model that was never running.
+    """
+
+    def __init__(self, seconds: int, base_url: str | None = None) -> None:
+        where = f" at {base_url}" if base_url else ""
+        super().__init__(
+            f"Ollama{where} did not respond within {seconds} seconds. "
+            "If it is not running, start it with:  ollama serve",
+            code="LLM_TIMEOUT",
+        )
 
 
 @dataclass(frozen=True)
@@ -215,12 +230,12 @@ class OllamaClient:
                 f"Ollama refused the request (HTTP {exc.code}).", code="LLM_HTTP_ERROR"
             ) from exc
         except TimeoutError as exc:
-            raise LlmTimeoutError(timeout) from exc
+            raise LlmTimeoutError(timeout, self.base_url) from exc
         except urllib.error.URLError as exc:
             # Covers "connection refused" — by far the most common cause, and
             # the one with the simplest fix.
             if isinstance(exc.reason, TimeoutError):
-                raise LlmTimeoutError(timeout) from exc
+                raise LlmTimeoutError(timeout, self.base_url) from exc
             raise LlmUnavailableError(
                 f"Could not reach Ollama at {self.base_url} ({exc.reason}). "
                 "Start it with:  ollama serve"
