@@ -185,6 +185,7 @@ query is printed underneath, so a result can be reproduced and argued with.
 | Parsing the **real** MITRE catalogue — 944 weaknesses, version 4.20 | ✅ pass |
 | Retrieval quality with the **real** model — 6/6 cases | ✅ pass (after two fixes) |
 | `verify.ps1` on Windows — 474 passed, 6 skipped | ✅ pass |
+| Incremental rebuild — 11 written, 976 unchanged, 16s | ✅ pass |
 
 ### Do the controls bite?
 
@@ -259,9 +260,9 @@ fix — followed by catalogue text, with no cross-language passages at all.
   section-aware chunking, the embedder layer with its three refusals, vector
   storage and exact similarity, filter-first retrieval, the two endpoints, the
   builder CLI, the retrieval-check script, the UI panel, documentation.
-- **REMAINING (yours):** the OWASP Top 10 files, whose English copies live in
-  `2021/docs/en` rather than `2021/docs`; rebuild afterwards, which costs
-  seconds because the catalogue hashes match and is skipped.
+- **REMAINING (yours):** nothing. The knowledge base is 987 documents and
+  4,176 passages — 944 CWE weaknesses, 10 OWASP categories, 32 rule notes — and
+  the retrieval check passes 6/6 against the real model.
 - **Deferred on purpose:** an ANN index or pgvector (documented as the scale-out
   path, not pretended away), re-ranking, retrieval over the user's own code
   (that is a different index with different privacy rules), and any generation

@@ -33,6 +33,14 @@ SOURCE_VERSION = "2021"
 # embeds to nothing useful and would crowd out real guidance.
 SKIPPED_SECTIONS = {"references", "list of mapped cwes"}
 
+# The Top 10 is A01 to A10. The published directory also holds A00 ("How to
+# start an AppSec program") and A11 ("Next Steps"), which are programme advice
+# rather than weakness categories — real documents that no finding should ever
+# retrieve as an explanation of itself. They are numbered like categories, so
+# only the range keeps them out.
+FIRST_CATEGORY = 1
+LAST_CATEGORY = 10
+
 
 class OwaspSourceError(RuntimeError):
     """The Top 10 documents could not be read."""
@@ -50,7 +58,10 @@ def owasp_code(value: str | None) -> str | None:
     match = OWASP_CODE.search(value)
     if not match:
         return None
-    return f"A{int(match.group(1)):02d}:{match.group(2)}"
+    number = int(match.group(1))
+    if not FIRST_CATEGORY <= number <= LAST_CATEGORY:
+        return None
+    return f"A{number:02d}:{match.group(2)}"
 
 
 def _slug(title: str) -> str:

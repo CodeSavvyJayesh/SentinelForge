@@ -338,3 +338,24 @@ def test_each_note_has_both_a_risk_and_a_fix() -> None:
     exactly the advice this phase exists to stop producing."""
     for document in notes.build_documents():
         assert [section.name for section in document.sections] == ["Risk", "Fix"], document.rule_id
+
+
+def test_only_the_ten_categories_are_indexed() -> None:
+    """OWASP publishes A00 ("How to start an AppSec program") and A11 ("Next
+    Steps") in the same directory, numbered like categories. They are real
+    documents and useful ones — and no finding should ever retrieve "how to
+    start an AppSec program" as the explanation of a weak hash."""
+    assert owasp.owasp_code("A01:2021 – Broken Access Control") == "A01:2021"
+    assert owasp.owasp_code("A10:2021 – Server-Side Request Forgery") == "A10:2021"
+    assert owasp.owasp_code("A00:2021 – How to start an AppSec program") is None
+    assert owasp.owasp_code("A11:2021 – Next Steps") is None
+
+
+def test_a_non_category_document_is_skipped_entirely(tmp_path) -> None:  # noqa: ANN001
+    (tmp_path / "A11_2021-Next_Steps.md").write_text(
+        "# A11:2021 – Next Steps\n\n## Overview\n\nWhat to do after the Top 10.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "A03_2021-Injection.md").write_text(OWASP_MARKDOWN, encoding="utf-8")
+    documents = owasp.build_documents(tmp_path)
+    assert [document.external_id for document in documents] == ["A03:2021"]
