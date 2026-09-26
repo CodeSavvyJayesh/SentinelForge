@@ -163,6 +163,7 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Static analysis engine (AST + patterns + secrets) | Implemented (Phase 5) — see [security/analysis.md](../security/analysis.md) |
 | Scan orchestration, background worker, finding lifecycle | Implemented (Phase 6) |
 | Security knowledge base: local CWE/OWASP index, retrieval per finding | Implemented (Phase 7) — see [security/knowledge.md](../security/knowledge.md) |
-| Ollama LLM, risk engine | Phases 8–9 |
+| Local LLM explanation of findings, grounded in the knowledge base | Implemented (Phase 8) — see [security/llm.md](../security/llm.md) |
+| Risk engine | Phase 9 |
 | Patch generation & validation | Phases 10–11 |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |

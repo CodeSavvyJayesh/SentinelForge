@@ -1278,3 +1278,98 @@ a.button {
 .knowledge__query code {
   word-break: break-word;
 }
+
+/* ---------- Local model explanations (Phase 8) ---------- */
+
+.explanation {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.explanation__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.explanation__heading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.explanation__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* A caveat that blends into the prose is a caveat nobody reads. */
+.explanation__warning {
+  margin: 0 0 var(--space-2);
+  border-left: 2px solid var(--color-fail);
+  background: var(--color-fail-bg);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.8125rem;
+}
+
+.explanation__body {
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.explanation__body dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.explanation__body dd {
+  margin: 0 0 var(--space-2);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.explanation__citations {
+  margin-top: var(--space-3);
+  font-size: 0.75rem;
+}
+
+.explanation__citations-label {
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.explanation__citations ul {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.explanation__marker {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+}
+
+.explanation__source {
+  color: var(--color-text-muted);
+}
+
+.explanation__provenance {
+  margin: var(--space-3) 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}

@@ -61,6 +61,14 @@ os.environ.setdefault("CLONE_TIMEOUT_SECONDS", "30")
 # worker explicitly through the `scan_worker` fixture, which is both
 # deterministic and a more honest test of the claim-run-commit cycle.
 os.environ["SCAN_WORKER_ENABLED"] = "false"
+
+# Explanations (Phase 8). Same rule as the scan worker: nothing starts itself.
+# The model is faked at the client boundary in every test, so the suite never
+# needs Ollama running or a 4.7 GB model on disk.
+os.environ["EXPLANATION_WORKER_ENABLED"] = "false"
+os.environ.setdefault("EXPLANATION_POLL_INTERVAL_SECONDS", "0.05")
+os.environ.setdefault("EXPLANATION_STALE_AFTER_SECONDS", "300")
+os.environ.setdefault("OLLAMA_MODEL", "test-model:1b")
 os.environ.setdefault("SCAN_POLL_INTERVAL_SECONDS", "0.05")
 os.environ.setdefault("SCAN_STALE_AFTER_SECONDS", "60")
 os.environ["LOG_FORMAT"] = "text"
@@ -101,6 +109,34 @@ def scan_worker(db_session: Session):
 
 
 @pytest.fixture
+def fake_llm():  # noqa: ANN201 - tests.helpers.FakeOllama
+    """A stand-in Ollama. See `tests.helpers.FakeOllama` for why it fakes the
+    daemon but never the contract."""
+    from tests.helpers import FakeOllama
+
+    return FakeOllama()
+
+
+@pytest.fixture
+def explanation_worker(db_session: Session, stub_embedder, fake_llm):  # noqa: ANN001, ANN201
+    """A worker sharing the test transaction, driven tick by tick.
+
+    Same arrangement as `scan_worker`: its sessions join the test's connection
+    as savepoints, so its commits are real from its point of view and still
+    roll back with the test.
+    """
+    from app.core.config import get_settings
+    from app.workers.explanation_worker import ExplanationWorker
+
+    def session_factory() -> Session:
+        return Session(bind=db_session.connection(), join_transaction_mode="create_savepoint")
+
+    return ExplanationWorker(
+        get_settings(), session_factory=session_factory, embedder=stub_embedder, llm=fake_llm
+    )
+
+
+@pytest.fixture
 def workspace_root() -> Path:
     """Where ingested code lands during tests."""
     return _TEST_WORKSPACE_ROOT
@@ -138,16 +174,18 @@ def stub_embedder():  # noqa: ANN201 - tests.helpers.HashingEmbedder
 
 @pytest.fixture(autouse=True)
 def _reset_embedder() -> Iterator[None]:
-    """Never let one test's embedder leak into the next through the singleton."""
-    from app.core.deps import _EmbedderHolder
+    """Never let one test's embedder or model client leak into the next."""
+    from app.core.deps import _EmbedderHolder, _LlmClientHolder
 
     _EmbedderHolder.reset()
+    _LlmClientHolder.reset()
     yield
     _EmbedderHolder.reset()
+    _LlmClientHolder.reset()
 
 
 @pytest.fixture
-def api_client(db_session: Session, stub_embedder) -> Iterator[TestClient]:  # noqa: ANN001
+def api_client(db_session: Session, stub_embedder, fake_llm) -> Iterator[TestClient]:  # noqa: ANN001
     """Client whose requests share one transaction that is rolled back afterwards.
 
     Endpoints may call ``commit()``; the surrounding transaction still undoes
@@ -157,11 +195,12 @@ def api_client(db_session: Session, stub_embedder) -> Iterator[TestClient]:  # n
     not depend on a 130 MB download, and the wiring that builds the real one is
     asserted separately in ``tests/unit/test_embedder.py``.
     """
-    from app.core.deps import get_db, get_embedder
+    from app.core.deps import get_db, get_embedder, get_llm_client
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_embedder] = lambda: stub_embedder
+    app.dependency_overrides[get_llm_client] = lambda: fake_llm
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
     app.dependency_overrides.clear()

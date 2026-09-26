@@ -20,10 +20,12 @@ from app.core.security import (
     decode_access_token,
 )
 from app.knowledge.embedder import Embedder, build_embedder
+from app.llm.client import OllamaClient
 from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
+from app.services.explanation_service import ExplanationService
 from app.services.knowledge_service import KnowledgeService
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
@@ -134,6 +136,45 @@ def get_knowledge_service(
 
 
 KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
+
+
+class _LlmClientHolder:
+    """One Ollama client per process.
+
+    The client holds no connection and no model, so this is only about not
+    rebuilding a small object per request — but it is also the single place a
+    test can swap in a fake daemon.
+    """
+
+    _client: OllamaClient | None = None
+
+    @classmethod
+    def get(cls, settings: Settings) -> OllamaClient:
+        if cls._client is None:
+            from app.workers.explanation_worker import build_llm_client
+
+            cls._client = build_llm_client(settings)
+        return cls._client
+
+    @classmethod
+    def reset(cls) -> None:
+        cls._client = None
+
+
+def get_llm_client(settings: AppSettings) -> OllamaClient:
+    return _LlmClientHolder.get(settings)
+
+
+LlmClientDep = Annotated[OllamaClient, Depends(get_llm_client)]
+
+
+def get_explanation_service(
+    db: DbSession, settings: AppSettings, embedder: EmbedderDep, llm: LlmClientDep
+) -> ExplanationService:
+    return ExplanationService(db, settings, embedder, llm)
+
+
+ExplanationServiceDep = Annotated[ExplanationService, Depends(get_explanation_service)]
 
 
 def get_current_user(

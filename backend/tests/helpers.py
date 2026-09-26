@@ -12,6 +12,7 @@ disk, so a signature scanner has nothing to match.
 """
 
 import hashlib
+import json
 import re
 
 from alembic import command
@@ -82,3 +83,79 @@ class HashingEmbedder:
             bucket = int.from_bytes(hashlib.sha256(word.encode()).digest()[:4], "big")
             values[bucket % self._dimensions] += 1.0
         return normalise(values)
+
+
+class FakeOllama:
+    """A stand-in for the Ollama daemon.
+
+    The test suite must never need a 4.7 GB model installed, and it must never
+    depend on what that model happens to say today. So the daemon is faked at
+    the boundary this project actually owns: the client's two methods.
+
+    What it does *not* fake is the contract. Responses go through the real
+    parser, which is where the citation checking, the link stripping and the
+    schema enforcement live — those are the security properties of this phase,
+    and testing them against a mock of themselves would prove nothing.
+    """
+
+    def __init__(
+        self,
+        response: str | None = None,
+        *,
+        model: str = "test-model:1b",
+        installed: bool = True,
+        error: Exception | None = None,
+        ready_error: Exception | None = None,
+    ) -> None:
+        self.model = model
+        self.response = (
+            response
+            if response is not None
+            else json.dumps(
+                {
+                    "summary": "The code hashes with MD5, which is collision-broken.",
+                    "impact": "An attacker can craft a second input with the same digest.",
+                    "remediation": 'Use MessageDigest.getInstance("SHA-256") instead.',
+                    "citations": [1],
+                }
+            )
+        )
+        self.installed = installed
+        self.error = error
+        self.ready_error = ready_error
+        self.prompts: list[str] = []
+        self.systems: list[str | None] = []
+
+    def check_ready(self) -> None:
+        if self.ready_error is not None:
+            raise self.ready_error
+
+    def available_models(self) -> list[str]:
+        return [self.model] if self.installed else []
+
+    def generate(self, prompt: str, *, system: str | None = None):  # noqa: ANN201
+        from app.llm.client import Completion
+
+        self.prompts.append(prompt)
+        self.systems.append(system)
+        if self.error is not None:
+            raise self.error
+        return Completion(
+            text=self.response,
+            model=self.model,
+            total_duration_ms=1234,
+            prompt_tokens=100,
+            completion_tokens=50,
+        )
+
+
+def llm_response(**overrides) -> str:  # noqa: ANN003
+    """A well-formed model answer, with fields overridden as a test needs."""
+    payload = {
+        "summary": "Summary of the problem.",
+        "impact": "What an attacker does with it.",
+        "remediation": "What to change.",
+        "citations": [1],
+    }
+    payload.update(overrides)
+    return json.dumps(payload)

@@ -205,6 +205,43 @@ vulnerability, and this is a statement about the installation. The same code is
 returned when the stored vectors came from a different embedding model than the
 one configured, because their scores cannot be compared.
 
+## Explanations
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/findings/{id}/explanation` | Bearer | **202 Accepted** — queues a generation and returns immediately |
+| `GET /api/v1/explanations/{id}` | Bearer | poll this while the status is `QUEUED` or `RUNNING` |
+| `GET /api/v1/findings/{id}/explanation` | Bearer | the latest attempt, or **204** when one was never requested |
+
+202 rather than 200 for the same reason as scans, and more so: a 7B model on a
+CPU takes tens of seconds. There is no synchronous endpoint, and none that
+accepts a prompt — the prompt is built by the server from a finding and its
+indexed passages, and letting a client supply one would turn this into a
+general-purpose model endpoint wearing the application's credentials.
+
+204 distinguishes "nobody has asked" from "asked and produced nothing"; a failed
+generation is returned with its reason rather than hidden, so the UI can name
+the command that fixes it instead of showing an empty panel.
+
+```json
+{"id": 12, "finding_id": 41, "status": "COMPLETED",
+ "summary": "…", "impact": "…", "remediation": "…",
+ "model": "qwen2.5-coder:7b", "prompt_version": 1,
+ "grounded": true, "dropped_citations": 1, "links_removed": 0,
+ "citations": [
+   {"number": 1, "chunk_id": 903, "source": "CWE", "external_id": "CWE-327",
+    "section": "Mitigations", "url": "https://cwe.mitre.org/data/definitions/327.html"}
+ ],
+ "duration_ms": 24180, "error_message": null}
+```
+
+Everything under `citations` except `number` is read from our own knowledge
+base, never from the model — which is what makes the link safe to render.
+`dropped_citations` counts references the model made to passages it was never
+given, and `grounded` is false when none survived. Both are part of the
+response rather than a log line: they are the clearest evidence available that
+a model invented a source, and a reader is entitled to see them.
+
 ## Scans
 
 | Endpoint | Auth | Notes |

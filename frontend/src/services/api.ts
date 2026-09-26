@@ -2,6 +2,7 @@ import { appConfig } from '../config/env'
 import { createAnalysisService } from './analysisService'
 import { createApiClient } from './apiClient'
 import { createAuthService } from './authService'
+import { createExplanationService } from './explanationService'
 import { createHealthService } from './healthService'
 import { createKnowledgeService } from './knowledgeService'
 import { createProjectService } from './projectService'
@@ -39,3 +40,4 @@ export const repositoryService = createRepositoryService(apiClient)
 export const analysisService = createAnalysisService(apiClient)
 export const scanService = createScanService(apiClient)
 export const knowledgeService = createKnowledgeService(apiClient)
+export const explanationService = createExplanationService(apiClient)
