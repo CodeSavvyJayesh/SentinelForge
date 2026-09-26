@@ -223,6 +223,21 @@ fails with 0-based numbering, as it should.
 Three separate readers share that numbering, and it took two attempts to write a
 test that could see a shift in it.
 
+**And the endpoint never committed.** Twenty-three tests passed, `verify.ps1`
+passed, and in the running application the queued row was rolled back the moment
+the request's session closed. The client got an id for a row that had ceased to
+exist; the worker, in a different session, waited for work that was not there.
+Nothing errored — the request returned 202 and the panel simply never changed.
+
+Every test in that file shares one session between the client and the worker
+inside a single transaction, which is what makes them fast and isolated. It also
+means an uncommitted row is visible to everything in the test. The fixture could
+not see this bug, and no test written in the ordinary style ever would have.
+
+The test added for it asserts the **commit itself** rather than its effect,
+which is the only shape the fixture cannot hide. Removing the commit now fails
+it.
+
 **And one test was passing without ever running the code it named.** The
 refused-connection test pointed at `127.0.0.1:1`. On Linux that is refused
 instantly, which is the branch under test. On Windows the firewall drops rather

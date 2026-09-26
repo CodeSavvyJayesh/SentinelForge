@@ -12,7 +12,7 @@ model endpoint with the application's credentials attached to it.
 
 from fastapi import APIRouter, Response, status
 
-from app.core.deps import Context, CurrentUser, ExplanationServiceDep
+from app.core.deps import Context, CurrentUser, DbSession, ExplanationServiceDep
 from app.models import Explanation
 from app.schemas.error import ErrorResponse
 from app.schemas.explanation import ExplanationCitation, ExplanationRead
@@ -78,9 +78,20 @@ def request_explanation(
     user: CurrentUser,
     context: Context,
     service: ExplanationServiceDep,
+    db: DbSession,
 ) -> ExplanationRead:
-    """202 Accepted: queued, not generated. The client polls the returned id."""
-    return to_read(service.request(finding_id, user, context), service)
+    """202 Accepted: queued, not generated. The client polls the returned id.
+
+    The commit is the whole point of this endpoint. A queued row that is not
+    committed is rolled back when the request's session closes, so the client
+    receives an id for a row that never existed and the worker — which runs in
+    a different session entirely — has nothing to claim. The request looks
+    perfect from the outside and nothing ever happens.
+    """
+    explanation = service.request(finding_id, user, context)
+    db.commit()
+    db.refresh(explanation)
+    return to_read(explanation, service)
 
 
 @router.get(

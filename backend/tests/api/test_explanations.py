@@ -133,6 +133,38 @@ def test_requesting_an_explanation_returns_immediately_and_queues_it(
     assert body["summary"] is None
 
 
+def test_queueing_an_explanation_commits_it(
+    api_client: TestClient, db_session: Session, stub_embedder, monkeypatch
+) -> None:  # noqa: ANN001
+    """The endpoint must commit, and no other test in this file can tell.
+
+    Every test here shares one session between the client and the worker inside
+    a single transaction, which is what makes them fast and isolated — and it
+    means an uncommitted row is visible to everything in the test anyway. The
+    first version of this endpoint never committed. All twenty-three tests
+    passed, and in the running application the client got an id for a row that
+    had been rolled back while the worker, in a different session, waited
+    forever for work that did not exist.
+
+    So this asserts the commit itself rather than its effect. It is the only
+    shape of test the fixture cannot hide.
+    """
+    token = sign_up(api_client, "excommit")
+    finding = make_finding(api_client, db_session, token)
+    build_knowledge(db_session, stub_embedder)
+
+    commits: list[int] = []
+    real_commit = db_session.commit
+    monkeypatch.setattr(
+        db_session, "commit", lambda: (commits.append(1), real_commit())[1], raising=False
+    )
+
+    response = api_client.post(f"/api/v1/findings/{finding.id}/explanation", headers=auth(token))
+
+    assert response.status_code == 202
+    assert commits, "the queued explanation was never committed, so the worker cannot see it"
+
+
 def test_the_worker_generates_and_stores_the_explanation(
     api_client: TestClient, db_session: Session, stub_embedder, explanation_worker, fake_llm
 ) -> None:  # noqa: ANN001
