@@ -124,16 +124,44 @@ def client() -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def api_client(db_session: Session) -> Iterator[TestClient]:
+def stub_embedder():  # noqa: ANN201 - tests.helpers.HashingEmbedder
+    """The embedder every test uses. See ``tests.helpers.HashingEmbedder``.
+
+    Deterministic, dependency-free, and discriminating enough that a broken
+    ranking fails a test. The real model is checked separately, by
+    ``scripts/check_retrieval.py`` against a real knowledge base.
+    """
+    from tests.helpers import HashingEmbedder
+
+    return HashingEmbedder()
+
+
+@pytest.fixture(autouse=True)
+def _reset_embedder() -> Iterator[None]:
+    """Never let one test's embedder leak into the next through the singleton."""
+    from app.core.deps import _EmbedderHolder
+
+    _EmbedderHolder.reset()
+    yield
+    _EmbedderHolder.reset()
+
+
+@pytest.fixture
+def api_client(db_session: Session, stub_embedder) -> Iterator[TestClient]:  # noqa: ANN001
     """Client whose requests share one transaction that is rolled back afterwards.
 
     Endpoints may call ``commit()``; the surrounding transaction still undoes
     everything, so database tests never leave rows behind.
+
+    The embedding model is overridden here rather than loaded: a test run must
+    not depend on a 130 MB download, and the wiring that builds the real one is
+    asserted separately in ``tests/unit/test_embedder.py``.
     """
-    from app.core.deps import get_db
+    from app.core.deps import get_db, get_embedder
 
     app = create_app()
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[get_embedder] = lambda: stub_embedder
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
     app.dependency_overrides.clear()

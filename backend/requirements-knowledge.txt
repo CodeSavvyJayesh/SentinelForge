@@ -1,0 +1,12 @@
+# Optional: the local embedding model for the security knowledge base (Phase 7).
+# Install: pip install -r requirements-knowledge.txt
+#
+# Kept out of requirements.txt on purpose. The API, the migrations and the whole
+# test suite run without it — only building and querying the knowledge base
+# needs a model, and that is one command run by a person, not a request path.
+# Making it mandatory would put ~150 MB of ONNX runtime in front of anyone who
+# only wants to run the scanner.
+#
+# fastembed runs the model on the CPU through onnxruntime. sentence-transformers
+# would give the same vectors and bring PyTorch — about 2.5 GB — with it.
+fastembed

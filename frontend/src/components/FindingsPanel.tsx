@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { EmptyState } from './EmptyState'
+import { FindingKnowledge } from './FindingKnowledge'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
 import { ScanHistory } from './ScanHistory'
@@ -345,6 +346,9 @@ function FindingCard({ finding }: { finding: Finding }) {
               </div>
             )}
           </dl>
+          {/* Fetched only once the card is open: a list of fifty findings would
+              otherwise fire fifty retrievals nobody reads. */}
+          <FindingKnowledge findingId={finding.id} />
         </div>
       )}
     </li>

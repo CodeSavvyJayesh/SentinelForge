@@ -2,9 +2,11 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 6 — Scan orchestration** complete (foundation, accounts, projects, ingestion, detection, background scans with history).
-> Scanning, AI analysis, RAG, patching and validation are **not implemented yet**; they are
-> planned in later phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
+> Status: **Phase 7 — Security knowledge base (RAG)** complete (foundation, accounts, projects,
+> ingestion, detection, background scans with history, and locally-indexed CWE/OWASP knowledge
+> retrieved per finding).
+> AI analysis, patching and validation are **not implemented yet**; they are planned in later
+> phases (see [Roadmap](#roadmap)). Nothing in the UI is simulated.
 
 ## Problem statement
 
@@ -30,7 +32,7 @@ flowchart TD
     LLM --> Risk[Deterministic risk engine] --> Patch[Patch generation]
     Patch --> Validate[Patch validation + re-scan]
     API --> PG[(PostgreSQL)]
-    RAG --> VDB[(Vector DB)]
+    RAG --> PG
 ```
 
 Design: a **modular monolith** (one FastAPI service with clearly separated modules), built
@@ -156,7 +158,7 @@ SentinelForge/
 | 4 | Repository ingestion & language detection | ✅ Done |
 | 5 | Analysis engine (AST rules, patterns, secret detection) | ✅ Done |
 | 6 | Scan orchestration & background jobs | ✅ Done |
-| 7 | RAG (security knowledge) | Planned |
+| 7 | RAG (security knowledge) | ✅ Done |
 | 8 | Local LLM (Ollama) analysis & explanation | Planned |
 | 9 | Risk engine | Planned |
 | 10–11 | Patch generation & validation | Planned |
@@ -168,6 +170,12 @@ SentinelForge/
 - Analysis is rule-based and local: there is no data-flow (taint) tracking yet, so a finding says "this call is dangerous", not "user input reaches it".
 - "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
 - Scans run in the background on the API machine. Workers on other machines, and scheduled scans, are not built yet.
+- The knowledge base has to be built once, by hand (`python scripts/build_knowledge.py`), from a
+  downloaded CWE catalogue. Until then, findings are listed without reference material and the UI
+  says why rather than showing an empty panel.
+- Retrieval is exact brute-force similarity over a few thousand passages. That is fast at this
+  size and would need a real index (pgvector, or an ANN library) at a hundred times it.
+- Nothing yet *reads* the retrieved knowledge and reasons about it — that is Phase 8.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -182,9 +190,11 @@ SentinelForge/
 - [Security: authentication model](docs/security/authentication.md)
 - [Security: ingesting untrusted code](docs/security/ingestion.md)
 - [Security: analysing untrusted code](docs/security/analysis.md)
+- [Security: the knowledge base](docs/security/knowledge.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
 - [Phase 4 report](docs/development/phases/phase-04-ingestion.md)
 - [Phase 5 report](docs/development/phases/phase-05-analysis.md)
 - [Phase 6 report](docs/development/phases/phase-06-scans.md)
+- [Phase 7 report](docs/development/phases/phase-07-knowledge.md)
