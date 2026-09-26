@@ -117,6 +117,45 @@ def _finding(case: tuple[str, str, str, str, str, str, str]) -> Finding:
     )
 
 
+# Sections that answer "how do I fix this?". At least one has to reach the top
+# of the list, because that is the question a developer looking at a finding is
+# actually asking.
+REMEDIATION_SECTIONS = frozenset({"Fix", "Mitigations"})
+# A list of platform names. It is worth indexing and it is never the best answer
+# to anything, so seeing it first means the ranking is not working.
+NEVER_FIRST = frozenset({"Applicable platforms"})
+
+
+def _judge(passages, expected: str) -> list[str]:  # noqa: ANN001
+    """Why this case failed, or an empty list if it passed.
+
+    The first check — is the right CWE present — is close to tautological, and
+    saying so is more useful than quietly banking it: retrieval *filters* on the
+    finding's CWE, so the material is there unless the filter itself is broken.
+    Worth asserting, but it tests our SQL rather than the model.
+
+    The other two check what only the model decides: the order. Whether a query
+    about fixing a weakness surfaces the mitigation text rather than the list of
+    affected platforms is exactly the claim a stub embedder cannot make, and it
+    is the reason this script exists at all.
+    """
+    reasons: list[str] = []
+    if not passages:
+        return ["nothing was retrieved"]
+
+    if not any(passage.chunk.cwe_id == expected for passage in passages):
+        reasons.append(f"{expected} is absent — the identifier filter is not working")
+
+    first = passages[0].chunk.section
+    if first in NEVER_FIRST:
+        reasons.append(f"ranked {first!r} first, which answers no question")
+
+    top = [passage.chunk.section for passage in passages[:3]]
+    if not REMEDIATION_SECTIONS.intersection(top):
+        reasons.append(f"no remediation section in the top 3 (got {', '.join(top)})")
+    return reasons
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check retrieval quality with the real model.")
     parser.add_argument("--show", type=int, default=3, help="Passages to print per case")
@@ -148,9 +187,10 @@ def main() -> int:
                 print(f"{finding.rule_id}: could not retrieve — {error}", file=sys.stderr)
                 return 3
 
-            found = any(passage.chunk.cwe_id == expected for passage in passages)
-            failures += 0 if found else 1
-            print(f"{'PASS' if found else 'FAIL'}  {finding.rule_id}  expects {expected}")
+            reasons = _judge(passages, expected)
+            failures += 1 if reasons else 0
+            verdict = "PASS" if not reasons else "FAIL"
+            print(f"{verdict}  {finding.rule_id}  expects {expected}")
             print(f"      query: {query_text(finding)}")
             for passage in passages[: arguments.show]:
                 document = passage.chunk.document
@@ -158,6 +198,8 @@ def main() -> int:
                     f"      {passage.score:+.3f}  [{passage.matched_by:<8}] "
                     f"{document.external_id} — {passage.chunk.section}"
                 )
+            for reason in reasons:
+                print(f"      ! {reason}")
             print()
 
         print(f"{len(CASES) - failures}/{len(CASES)} cases passed")
