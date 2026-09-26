@@ -5,6 +5,11 @@ Alembic autogenerate imports this package to discover tables.
 """
 
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.explanation import (
+    ACTIVE_EXPLANATION_STATUSES,
+    Explanation,
+    ExplanationStatus,
+)
 from app.models.finding import Confidence, Finding, FindingStatus, Severity
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeSource
 from app.models.project import Project
@@ -16,7 +21,10 @@ from app.models.user import User, UserRole
 __all__ = [
     "AuditAction",
     "AuditLog",
+    "ACTIVE_EXPLANATION_STATUSES",
     "Confidence",
+    "Explanation",
+    "ExplanationStatus",
     "ACTIVE_STATUSES",
     "Finding",
     "FindingStatus",

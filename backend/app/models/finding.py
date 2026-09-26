@@ -104,6 +104,11 @@ class Finding(TimestampMixin, Base):
     )
 
     repository: Mapped["Repository"] = relationship(back_populates="findings")  # noqa: F821
+    # Generated explanations, newest last. Deleted with the finding: an
+    # explanation of a finding that no longer exists explains nothing.
+    explanations: Mapped[list["Explanation"]] = relationship(  # noqa: F821
+        back_populates="finding", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     def __repr__(self) -> str:
         return (

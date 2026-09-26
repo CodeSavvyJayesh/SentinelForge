@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { EmptyState } from './EmptyState'
+import { FindingExplanation } from './FindingExplanation'
 import { FindingKnowledge } from './FindingKnowledge'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
@@ -349,6 +350,9 @@ function FindingCard({ finding }: { finding: Finding }) {
           {/* Fetched only once the card is open: a list of fifty findings would
               otherwise fire fifty retrievals nobody reads. */}
           <FindingKnowledge findingId={finding.id} />
+          {/* The explanation sits under the reference material on purpose:
+              the sources come first, then what the model made of them. */}
+          <FindingExplanation findingId={finding.id} />
         </div>
       )}
     </li>

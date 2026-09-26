@@ -146,6 +146,33 @@ class Settings(BaseSettings):
     # mitigation, short enough that its embedding is about one idea.
     KNOWLEDGE_MAX_CHUNK_CHARS: int = Field(default=1200, ge=200, le=8000)
 
+    # --- Local LLM (Phase 8) -----------------------------------------------
+    # Ollama on loopback. Nothing about a finding, a snippet or a query leaves
+    # this machine; if this is ever pointed at a remote host, that stops being
+    # true and the deployment owns that decision.
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5-coder:7b"
+    # A 7B model on a CPU takes tens of seconds. The timeout has to allow that
+    # and still bound a worker thread that would otherwise wait forever.
+    OLLAMA_TIMEOUT_SECONDS: int = Field(default=180, ge=10, le=900)
+    # Zero by default: the same finding should produce the same explanation.
+    # A stored explanation that changed wording on every regeneration could not
+    # be quoted in a report or compared between runs.
+    OLLAMA_TEMPERATURE: float = Field(default=0.0, ge=0.0, le=2.0)
+    OLLAMA_MAX_TOKENS: int = Field(default=800, ge=64, le=4096)
+    OLLAMA_CONTEXT_TOKENS: int = Field(default=8192, ge=1024, le=131072)
+
+    # The explanation worker runs in the API process, like the scan worker.
+    # Turn it off to generate from a separate process, or to keep a test
+    # deterministic.
+    EXPLANATION_WORKER_ENABLED: bool = True
+    EXPLANATION_POLL_INTERVAL_SECONDS: float = Field(default=1.0, gt=0, le=60)
+    # Much larger than the scan equivalent, because a real generation is tens
+    # of seconds: too small a window makes a slow model look like a crashed
+    # process, and the same expensive work gets done twice.
+    EXPLANATION_STALE_AFTER_SECONDS: int = Field(default=1800, ge=300)
+    EXPLANATION_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

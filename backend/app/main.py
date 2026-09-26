@@ -23,6 +23,7 @@ from app.core.middleware import (
 )
 from app.core.security import CSRF_HEADER_NAME
 from app.schemas.error import ErrorResponse
+from app.workers.explanation_worker import ExplanationWorker
 from app.workers.scan_worker import ScanWorker
 
 logger = get_logger("sentinelforge.app")
@@ -53,10 +54,33 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
         if cfg.SCAN_WORKER_ENABLED:
             worker = ScanWorker(cfg)
             worker.start()
+        # The explanation worker is a second thread rather than more work for
+        # the first: a scan is milliseconds, a CPU generation is tens of
+        # seconds, and sharing one worker would put every scan behind a queue
+        # of model calls.
+        #
+        # It is built lazily inside the branch because constructing it loads
+        # the embedding model, and an installation that never asks for an
+        # explanation should not pay for that at startup.
+        explainer: ExplanationWorker | None = None
+        if cfg.EXPLANATION_WORKER_ENABLED:
+            try:
+                explainer = ExplanationWorker(cfg)
+                explainer.start()
+            except Exception:  # noqa: BLE001 - a missing model must not stop the API
+                # Scanning, findings and the knowledge base all work without a
+                # language model. Refusing to boot because one is absent would
+                # make an optional feature a hard dependency.
+                logger.exception("explanation_worker_not_started")
+                explainer = None
+
         application.state.scan_worker = worker
+        application.state.explanation_worker = explainer
         try:
             yield
         finally:
+            if explainer is not None:
+                explainer.stop()
             if worker is not None:
                 worker.stop()
             engine.dispose()

@@ -35,6 +35,13 @@ class AuditAction(StrEnum):
     SCAN_COMPLETED = "scan.completed"
     SCAN_FAILED = "scan.failed"
 
+    # Phase 8. Recorded because a generated explanation is advice shown to a
+    # person: who asked for it, which model answered, and whether it had to be
+    # cleaned up are all things an audit should be able to reconstruct.
+    EXPLANATION_REQUESTED = "explanation.requested"
+    EXPLANATION_COMPLETED = "explanation.completed"
+    EXPLANATION_FAILED = "explanation.failed"
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
