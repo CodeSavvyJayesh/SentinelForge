@@ -24,9 +24,25 @@ from app.core.middleware import (
 from app.core.security import CSRF_HEADER_NAME
 from app.schemas.error import ErrorResponse
 from app.workers.explanation_worker import ExplanationWorker
+from app.workers.job_worker import JobWorker
+from app.workers.patch_worker import PatchWorker
 from app.workers.scan_worker import ScanWorker
 
 logger = get_logger("sentinelforge.app")
+
+
+def _start(worker_class: type[JobWorker], cfg: Settings, *, enabled: bool) -> JobWorker | None:
+    """Build and start a model-backed worker, or survive not being able to."""
+    if not enabled:
+        return None
+    try:
+        worker = worker_class(cfg)
+        worker.start()
+    except Exception:  # noqa: BLE001 - a missing model must not stop the API
+        logger.exception(f"{worker_class.job_name}_worker_not_started")
+        return None
+    return worker
+
 
 API_DESCRIPTION = (
     "SentinelForge — AI-powered DevSecOps platform for vulnerability detection, "
@@ -54,33 +70,31 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
         if cfg.SCAN_WORKER_ENABLED:
             worker = ScanWorker(cfg)
             worker.start()
-        # The explanation worker is a second thread rather than more work for
-        # the first: a scan is milliseconds, a CPU generation is tens of
-        # seconds, and sharing one worker would put every scan behind a queue
-        # of model calls.
+        # The model-backed workers are separate threads rather than more work
+        # for the scan one: a scan is milliseconds, a CPU generation is tens of
+        # seconds, and sharing a worker would put every scan behind a queue of
+        # model calls. Explanations and patches are separate from each other
+        # for the same reason in miniature — "what is this?" is asked first and
+        # should not queue behind "fix it".
         #
-        # It is built lazily inside the branch because constructing it loads
-        # the embedding model, and an installation that never asks for an
-        # explanation should not pay for that at startup.
-        explainer: ExplanationWorker | None = None
-        if cfg.EXPLANATION_WORKER_ENABLED:
-            try:
-                explainer = ExplanationWorker(cfg)
-                explainer.start()
-            except Exception:  # noqa: BLE001 - a missing model must not stop the API
-                # Scanning, findings and the knowledge base all work without a
-                # language model. Refusing to boot because one is absent would
-                # make an optional feature a hard dependency.
-                logger.exception("explanation_worker_not_started")
-                explainer = None
+        # Each is built lazily inside `_start`, because constructing one loads
+        # the embedding model; an installation that never asks for either
+        # should not pay for that at startup. A failure to build one is logged
+        # and survived: scanning, findings and the knowledge base all work
+        # without a language model, and refusing to boot because one is absent
+        # would turn an optional feature into a hard dependency.
+        explainer = _start(ExplanationWorker, cfg, enabled=cfg.EXPLANATION_WORKER_ENABLED)
+        patcher = _start(PatchWorker, cfg, enabled=cfg.PATCH_WORKER_ENABLED)
 
         application.state.scan_worker = worker
         application.state.explanation_worker = explainer
+        application.state.patch_worker = patcher
         try:
             yield
         finally:
-            if explainer is not None:
-                explainer.stop()
+            for background in (patcher, explainer):
+                if background is not None:
+                    background.stop()
             if worker is not None:
                 worker.stop()
             engine.dispose()

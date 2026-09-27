@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { EmptyState } from './EmptyState'
 import { FindingExplanation } from './FindingExplanation'
+import { FindingPatch } from './FindingPatch'
 import { FindingKnowledge } from './FindingKnowledge'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
@@ -359,6 +360,9 @@ function FindingCard({ finding }: { finding: Finding }) {
           {/* The explanation sits under the reference material on purpose:
               the sources come first, then what the model made of them. */}
           <FindingExplanation findingId={finding.id} />
+          {/* The proposal comes last, after the sources and the explanation:
+              a fix should be read by somebody who already knows what is wrong. */}
+          <FindingPatch findingId={finding.id} />
         </div>
       )}
     </li>

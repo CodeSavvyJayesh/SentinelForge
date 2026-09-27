@@ -109,6 +109,11 @@ class Finding(TimestampMixin, Base):
     explanations: Mapped[list["Explanation"]] = relationship(  # noqa: F821
         back_populates="finding", cascade="all, delete-orphan", passive_deletes=True
     )
+    # Proposed changes, deleted with the finding: a patch for a finding that no
+    # longer exists proposes a change to nothing.
+    patches: Mapped[list["Patch"]] = relationship(  # noqa: F821
+        back_populates="finding", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     def __repr__(self) -> str:
         return (

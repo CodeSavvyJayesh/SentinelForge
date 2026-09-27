@@ -42,6 +42,13 @@ class AuditAction(StrEnum):
     EXPLANATION_COMPLETED = "explanation.completed"
     EXPLANATION_FAILED = "explanation.failed"
 
+    # Phase 10. A proposed code change is advice with a diff attached: who asked
+    # for it, which model wrote it, and whether it was refused all belong in a
+    # record somebody can reconstruct later.
+    PATCH_REQUESTED = "patch.requested"
+    PATCH_PROPOSED = "patch.proposed"
+    PATCH_FAILED = "patch.failed"
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

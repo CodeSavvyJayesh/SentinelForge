@@ -125,6 +125,7 @@ class FakeOllama:
         self.ready_error = ready_error
         self.prompts: list[str] = []
         self.systems: list[str | None] = []
+        self.temperatures: list[float | None] = []
 
     def check_ready(self) -> None:
         if self.ready_error is not None:
@@ -133,11 +134,12 @@ class FakeOllama:
     def available_models(self) -> list[str]:
         return [self.model] if self.installed else []
 
-    def generate(self, prompt: str, *, system: str | None = None):  # noqa: ANN201
+    def generate(self, prompt: str, *, system: str | None = None, temperature: float | None = None):  # noqa: ANN201
         from app.llm.client import Completion
 
         self.prompts.append(prompt)
         self.systems.append(system)
+        self.temperatures.append(temperature)
         if self.error is not None:
             raise self.error
         return Completion(

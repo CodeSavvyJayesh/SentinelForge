@@ -257,6 +257,30 @@ general-purpose model endpoint wearing the application's credentials.
 generation is returned with its reason rather than hidden, so the UI can name
 the command that fixes it instead of showing an empty panel.
 
+## Proposed changes
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `POST /api/v1/findings/{id}/patch` | Bearer | **202 Accepted** — queues a generation; **409** when one is already running or the finding cannot be patched |
+| `GET /api/v1/patches/{id}` | Bearer | poll this while the status is `QUEUED` or `RUNNING` |
+| `GET /api/v1/findings/{id}/patch` | Bearer | the latest attempt, or **204** when one was never requested |
+
+Same 202-and-poll shape, and the same reasoning. What matters more here is what
+is **absent**: there is no endpoint that applies a patch, none that writes to
+the workspace, and none that marks a finding fixed. A client can ask for a
+proposal and read it.
+
+`status` reaches `PROPOSED` and no further, and `validated` is `false` on every
+response — hard-coded in the serializer rather than read from a column, so no
+row can be edited into claiming otherwise. Turning a proposal into a change is
+Phase 11's problem, and it does that by applying the diff to a copy and
+re-scanning, never by trusting this text.
+
+A `FAILED` patch carries the reason in `error_message`, and the reasons are
+written for the developer: *"the model returned the same code"*, *"the proposed
+change mostly deletes code"*, *"the code has changed since this finding was
+recorded"*. Those refusals are the most useful thing the endpoint returns.
+
 ```json
 {"id": 12, "finding_id": 41, "status": "COMPLETED",
  "summary": "…", "impact": "…", "remediation": "…",
