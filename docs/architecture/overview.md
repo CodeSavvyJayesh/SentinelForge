@@ -165,5 +165,6 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Security knowledge base: local CWE/OWASP index, retrieval per finding | Implemented (Phase 7) — see [security/knowledge.md](../security/knowledge.md) |
 | Local LLM explanation of findings, grounded in the knowledge base | Implemented (Phase 8) — see [security/llm.md](../security/llm.md) |
 | Deterministic risk scoring with per-factor explanations | Implemented (Phase 9) |
-| Patch generation & validation | Phases 10–11 |
+| Patch generation: proposed fixes as reviewable diffs, never applied | Implemented (Phase 10) — see [security/patching.md](../security/patching.md) |
+| Patch validation (apply to a copy, re-scan, compare) | Phase 11 |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |

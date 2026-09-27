@@ -7,6 +7,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.explanations import router as explanations_router
 from app.api.v1.health import router as health_router
 from app.api.v1.knowledge import router as knowledge_router
+from app.api.v1.patches import router as patches_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.repositories import router as repositories_router
 from app.api.v1.risk import router as risk_router
@@ -22,5 +23,6 @@ api_router.include_router(analysis_router)
 api_router.include_router(scans_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(explanations_router)
+api_router.include_router(patches_router)
 api_router.include_router(risk_router)
 api_router.include_router(users_router)

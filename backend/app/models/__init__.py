@@ -12,6 +12,7 @@ from app.models.explanation import (
 )
 from app.models.finding import Confidence, Finding, FindingStatus, Severity
 from app.models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeSource
+from app.models.patch import ACTIVE_PATCH_STATUSES, Patch, PatchStatus
 from app.models.project import Project
 from app.models.refresh_session import RefreshSession
 from app.models.repository import Repository, RepositorySource, RepositoryStatus
@@ -31,6 +32,9 @@ __all__ = [
     "KnowledgeChunk",
     "KnowledgeDocument",
     "KnowledgeSource",
+    "ACTIVE_PATCH_STATUSES",
+    "Patch",
+    "PatchStatus",
     "Project",
     "RefreshSession",
     "Repository",

@@ -27,6 +27,7 @@ from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
 from app.services.explanation_service import ExplanationService
 from app.services.knowledge_service import KnowledgeService
+from app.services.patch_service import PatchService
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
 from app.services.risk_service import RiskService
@@ -183,6 +184,15 @@ def get_explanation_service(
 
 
 ExplanationServiceDep = Annotated[ExplanationService, Depends(get_explanation_service)]
+
+
+def get_patch_service(
+    db: DbSession, settings: AppSettings, embedder: EmbedderDep, llm: LlmClientDep
+) -> PatchService:
+    return PatchService(db, settings, embedder, llm)
+
+
+PatchServiceDep = Annotated[PatchService, Depends(get_patch_service)]
 
 
 def get_current_user(

@@ -173,6 +173,17 @@ class Settings(BaseSettings):
     EXPLANATION_STALE_AFTER_SECONDS: int = Field(default=1800, ge=300)
     EXPLANATION_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
 
+    # The patch worker is a third thread, not more work for the explanation
+    # one: "what is this?" is asked before "fix it", and the first question
+    # should never queue behind the second.
+    PATCH_WORKER_ENABLED: bool = True
+    PATCH_POLL_INTERVAL_SECONDS: float = Field(default=1.0, gt=0, le=60)
+    PATCH_STALE_AFTER_SECONDS: int = Field(default=1800, ge=300)
+    # Two, not three. A refused proposal is usually refused for a reason that
+    # a retry will not change — the model deleted the code, or returned it
+    # unchanged — and each attempt costs a minute of CPU.
+    PATCH_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=10)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

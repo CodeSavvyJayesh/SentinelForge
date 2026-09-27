@@ -69,6 +69,14 @@ os.environ["EXPLANATION_WORKER_ENABLED"] = "false"
 os.environ.setdefault("EXPLANATION_POLL_INTERVAL_SECONDS", "0.05")
 os.environ.setdefault("EXPLANATION_STALE_AFTER_SECONDS", "300")
 os.environ.setdefault("OLLAMA_MODEL", "test-model:1b")
+
+# Patches (Phase 10). Same rule again: nothing starts itself, and no test ever
+# needs a model. Max attempts is pinned rather than inherited so a change to
+# the default cannot quietly alter what the retry tests are asserting.
+os.environ["PATCH_WORKER_ENABLED"] = "false"
+os.environ.setdefault("PATCH_POLL_INTERVAL_SECONDS", "0.05")
+os.environ.setdefault("PATCH_STALE_AFTER_SECONDS", "300")
+os.environ.setdefault("PATCH_MAX_ATTEMPTS", "2")
 os.environ.setdefault("SCAN_POLL_INTERVAL_SECONDS", "0.05")
 os.environ.setdefault("SCAN_STALE_AFTER_SECONDS", "60")
 os.environ["LOG_FORMAT"] = "text"
@@ -132,6 +140,26 @@ def explanation_worker(db_session: Session, stub_embedder, fake_llm):  # noqa: A
         return Session(bind=db_session.connection(), join_transaction_mode="create_savepoint")
 
     return ExplanationWorker(
+        get_settings(), session_factory=session_factory, embedder=stub_embedder, llm=fake_llm
+    )
+
+
+@pytest.fixture
+def patch_worker(db_session: Session, stub_embedder, fake_llm):  # noqa: ANN001, ANN201
+    """A patch worker sharing the test transaction, driven tick by tick.
+
+    Same arrangement as `scan_worker` and `explanation_worker`. All three now
+    inherit one loop from `JobWorker`, so this fixture also happens to be the
+    third confirmation that the extraction did not change any of their
+    behaviour.
+    """
+    from app.core.config import get_settings
+    from app.workers.patch_worker import PatchWorker
+
+    def session_factory() -> Session:
+        return Session(bind=db_session.connection(), join_transaction_mode="create_savepoint")
+
+    return PatchWorker(
         get_settings(), session_factory=session_factory, embedder=stub_embedder, llm=fake_llm
     )
 
