@@ -196,6 +196,13 @@ function Proposed({
         </p>
       )}
 
+      {patch.reindented && (
+        <p className="patch__warning" role="note">
+          The model returned this code without indentation, which was restored to match the
+          surrounding lines. Check that it sits where it should.
+        </p>
+      )}
+
       <div className="patch__filebar">
         <code className="patch__file">
           {patch.file_path}

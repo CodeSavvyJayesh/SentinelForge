@@ -826,3 +826,53 @@ def test_a_retry_is_not_bit_identical_to_the_attempt_that_failed(
     assert fake_llm.temperatures[-1] == RETRY_TEMPERATURE
     db_session.refresh(row)
     assert row.temperature == RETRY_TEMPERATURE
+
+
+def test_a_fix_returned_without_indentation_is_accepted(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The second defect found by running the thing rather than testing it.
+
+    The first Java proposal this project generated was correct and arrived
+    flush against the margin, having dropped the indentation of the line it
+    replaced. The same answer in Python does not parse, so the syntax check
+    would have refused a correct fix — the same failure mode as the deletion
+    check, reached by a different route.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement=FIXED_LINE.lstrip())
+    token = sign_up(api_client, "dedented")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.PROPOSED, body["error_message"]
+    assert body["reindented"] is True
+    # The indentation in the diff is the file's, not the model's.
+    assert "+    return hashlib.sha256(value).hexdigest()" in body["diff"]
+
+
+def test_a_well_formed_fix_is_not_reported_as_reindented(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The counter measures the model, so it must not fire when nothing was
+    wrong with the model's answer."""
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response()
+    token = sign_up(api_client, "wellformed")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.PROPOSED
+    assert body["reindented"] is False

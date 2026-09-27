@@ -47,7 +47,7 @@ from app.models import (
     User,
 )
 from app.patching import diffing
-from app.patching.region import Region, RegionError, read_region, splice
+from app.patching.region import Region, RegionError, read_region, reindent, splice
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.explanation_repository import ExplanationRepository
 from app.repositories.finding_repository import FindingRepository
@@ -201,9 +201,13 @@ class PatchService:
             # Recorded now, cleared on success. A refusal below is then able to
             # say what the model actually returned rather than only why it was
             # thrown away.
-            patch.rejected_code = parsed.replacement
+            # Indentation is arithmetic, so it is fixed here rather than
+            # hoped for from the model.
+            replacement, reindented = reindent(parsed.replacement, region.lines)
+            patch.rejected_code = replacement
+            patch.reindented = reindented
 
-            after = splice(region, parsed.replacement)
+            after = splice(region, replacement)
             diff = diffing.build(finding.file_path, region.file_lines, after)
             diffing.check(diff, replaced_lines=len(region.lines))
             diffing.check_syntax(finding.file_path, after)

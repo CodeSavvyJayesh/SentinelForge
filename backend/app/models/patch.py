@@ -106,6 +106,10 @@ class Patch(TimestampMixin, Base):
     gutters_stripped: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # Whether the replacement had to be shifted back to the indentation of the
+    # code it replaces. Models return the right line flush against the margin,
+    # which is cosmetic in Java and fatal in Python.
+    reindented: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
 
     # What the model actually returned, kept only when the proposal was
     # refused. Without it a rejection can only be reasoned about, not read —

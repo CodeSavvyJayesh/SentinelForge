@@ -59,6 +59,7 @@ const PATCH: Patch = {
   explanation_id: 3,
   fences_stripped: false,
   gutters_stripped: 0,
+  reindented: false,
   rejected_code: null,
   temperature: 0,
   duration_ms: 31_000,

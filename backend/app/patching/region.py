@@ -170,6 +170,53 @@ def read_region(
     )
 
 
+def reindent(replacement: str, original: list[str]) -> tuple[str, bool]:
+    """Put the replacement back at the indentation of the code it replaces.
+
+    Models lose leading whitespace. Asked to fix a line eight spaces deep, a
+    7B model returns the corrected line flush against the margin — it answered
+    the question and dropped the formatting, which was observed on the very
+    first Java proposal this project generated.
+
+    Left alone that is cosmetic in Java and fatal in Python: the patched file
+    does not parse, ``check_syntax`` refuses it, and the developer is told
+    their correct fix "does not parse as Python".
+
+    Indentation is arithmetic, so the server does it rather than asking the
+    model to. The whole block is shifted by the difference between the
+    original's indent and the model's, which preserves the relative
+    indentation *inside* the replacement — a returned if/else keeps its shape.
+
+    Nothing is done when the model already matched, and nothing is done when
+    the replacement is deeper than the original on purpose.
+    """
+    lines = replacement.split("\n")
+    first_code = next((line for line in lines if line.strip()), None)
+    if first_code is None or not original:
+        return replacement, False
+
+    wanted = _leading_space(original[0])
+    got = _leading_space(first_code)
+    if wanted == got:
+        return replacement, False
+
+    shifted: list[str] = []
+    for line in lines:
+        if not line.strip():
+            shifted.append("")  # never indent a blank line
+        elif line.startswith(got):
+            shifted.append(wanted + line[len(got) :])
+        else:
+            # Less indented than the block's own first line. Rare, and not
+            # something to guess at: leave it and let the syntax check judge.
+            shifted.append(line)
+    return "\n".join(shifted), True
+
+
+def _leading_space(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
 def splice(region: Region, replacement: str) -> list[str]:
     """Return the whole file with the region replaced.
 
@@ -212,5 +259,6 @@ __all__ = [
     "Region",
     "RegionError",
     "read_region",
+    "reindent",
     "splice",
 ]

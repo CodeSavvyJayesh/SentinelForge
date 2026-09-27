@@ -148,7 +148,36 @@ but is asked to replace only the finding's own lines, fenced off in the prompt:
 A one-line fix is then one line, and the size checks measure what they were
 always meant to: the fix against what it replaced.
 
-Two smaller things came out of the same incident:
+## And the defect the fix revealed
+
+The next proposal — a Java one — came back correct and **unindented**:
+
+```diff
+-        return MessageDigest.getInstance("MD5").digest(...);
++return MessageDigest.getInstance("SHA-256").digest(...);
+```
+
+The model answered the question and dropped the formatting. In Java that is
+cosmetic. In Python the patched file does not parse, `check_syntax` refuses it,
+and the developer is told their correct fix *"does not parse as Python"* — the
+same failure as the deletion check, reached by a different route.
+
+The prompt already asked the model to keep the indentation. It did not, and
+asking harder is not an engineering answer: **indentation is arithmetic**, so
+the server computes it. The replacement block is shifted by the difference
+between the original's indent and the model's, which preserves relative
+indentation inside the block, and `reindented` is recorded next to
+`fences_stripped` and `gutters_stripped` as one more measurement of how far the
+model's output was from usable code.
+
+Both of these were found by running the application against real findings,
+after a green suite and a clean mutation pass. That is the honest lesson of
+this phase, and it is worth stating plainly: **the tests verified that the code
+did what I designed it to do, and the design was wrong twice.** Mutation
+testing cannot help there either — it asks whether a control is exercised, not
+whether the control measures the right thing. Only real input did.
+
+## Two smaller things from the first incident
 
 - **A rejection kept its reason but not the proposal**, so diagnosing this
   meant inferring what the model had probably returned. `rejected_code` now
@@ -208,9 +237,9 @@ green suite could not. It keeps being worth the hour.
 | Check | Result |
 | --- | --- |
 | `ruff format` + `ruff check` | clean |
-| Backend tests | **665 passed** (76 new) |
+| Backend tests | **672 passed** (83 new) |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | clean; no drift |
-| Mutation pass | **49/49 controls killed** |
+| Mutation pass | **53/53 controls killed** |
 | `git apply --check` on a generated diff | applies |
 | `tsc --noEmit` | clean |
 | Frontend tests | **83 passed** |

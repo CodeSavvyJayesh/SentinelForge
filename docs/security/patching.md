@@ -62,6 +62,13 @@ Markers the model echoes back as if they were code are stripped, conservatively:
 only lines that match the marker pattern, never lines that merely contain
 angle brackets.
 
+**Indentation is restored by the server, not requested from the model.** Models
+return the corrected line flush against the margin. The prompt asks them not
+to; they do it anyway. Since the correct indentation is arithmetic — the indent
+of the line being replaced — the replacement block is shifted to match, which
+preserves relative indentation inside it. Without this, a correct Python fix
+arrives as a file that does not parse and is refused by the syntax check.
+
 ## Refusing to patch code that has moved
 
 If the file has been edited since the finding was recorded, a patch built from

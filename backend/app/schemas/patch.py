@@ -50,6 +50,7 @@ class PatchRead(BaseModel):
     # closely the model followed the contract.
     fences_stripped: bool
     gutters_stripped: int
+    reindented: bool
 
     # What the model returned when the proposal was refused. Shown behind a
     # disclosure rather than hidden: "the change mostly deletes code" is a

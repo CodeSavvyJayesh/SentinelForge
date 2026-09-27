@@ -223,3 +223,73 @@ def test_a_multi_line_replacement_expands_the_file(tmp_path: Path) -> None:
     assert len(after) == len(SOURCE.splitlines()) + 1
     assert "    digest = hashlib.sha256(value)\n" in after
     assert "    return digest.hexdigest()\n" in after
+
+
+# --- indentation ----------------------------------------------------------
+
+
+def test_a_replacement_that_lost_its_indentation_is_put_back(tmp_path: Path) -> None:
+    """The defect the first Java proposal exhibited.
+
+    Asked to fix a line eight spaces deep, the model returned the corrected
+    line against the margin. In Java that is cosmetic; in Python the file stops
+    parsing and a correct fix gets refused for "not parsing as Python".
+    """
+    from app.patching.region import reindent
+
+    original = ["        return md5(value)\n"]
+
+    fixed, changed = reindent("return sha256(value)", original)
+
+    assert fixed == "        return sha256(value)"
+    assert changed is True
+
+
+def test_relative_indentation_inside_the_replacement_survives(tmp_path: Path) -> None:
+    """A returned if/else keeps its shape — the whole block shifts together."""
+    from app.patching.region import reindent
+
+    original = ["    value = compute()\n"]
+
+    fixed, changed = reindent("if x:\n    a()\nelse:\n    b()", original)
+
+    assert fixed == "    if x:\n        a()\n    else:\n        b()"
+    assert changed is True
+
+
+def test_a_correctly_indented_replacement_is_left_alone(tmp_path: Path) -> None:
+    from app.patching.region import reindent
+
+    original = ["    return md5(value)\n"]
+
+    fixed, changed = reindent("    return sha256(value)", original)
+
+    assert fixed == "    return sha256(value)"
+    assert changed is False
+
+
+def test_blank_lines_are_never_given_indentation(tmp_path: Path) -> None:
+    """Trailing whitespace on an empty line is noise in the diff, and some
+    linters fail on it."""
+    from app.patching.region import reindent
+
+    fixed, _ = reindent("a()\n\nb()", ["    original()\n"])
+
+    assert fixed == "    a()\n\n    b()"
+
+
+def test_splicing_a_dedented_python_fix_still_parses(tmp_path: Path) -> None:
+    """End to end for the case that matters: without re-indentation this file
+    would not compile, and the syntax check would throw the fix away."""
+    import ast
+
+    from app.patching.region import reindent
+
+    write(tmp_path)
+    region = read_region(tmp_path, "app.py", 5, 5, context=0)
+
+    replacement, changed = reindent("return hashlib.sha256(value).hexdigest()", region.lines)
+    after = splice(region, replacement)
+
+    assert changed is True
+    ast.parse("".join(after))  # would raise before the fix

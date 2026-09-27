@@ -37,6 +37,8 @@ export interface Patch {
   /** How much tidying the model's answer needed before it was usable code. */
   fences_stripped: boolean
   gutters_stripped: number
+  /** True when the replacement had to be shifted back to the file's indentation. */
+  reindented: boolean
 
   /**
    * What the model returned when a proposal was refused.

@@ -49,6 +49,7 @@ def to_read(patch: Patch) -> PatchRead:
         explanation_id=patch.explanation_id,
         fences_stripped=patch.fences_stripped,
         gutters_stripped=patch.gutters_stripped,
+        reindented=patch.reindented,
         rejected_code=patch.rejected_code,
         temperature=patch.temperature,
         duration_ms=patch.duration_ms,
