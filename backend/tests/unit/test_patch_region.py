@@ -12,6 +12,8 @@ import pytest
 
 from app.patching.region import (
     MAX_LINE_CHARS,
+    REPLACE_END,
+    REPLACE_START,
     RegionError,
     read_region,
     splice,
@@ -37,15 +39,26 @@ def write(root: Path, name: str = "app.py", text: str = SOURCE) -> Path:
     return path
 
 
-def test_it_reads_the_line_with_context_around_it(tmp_path: Path) -> None:
+def test_the_replaceable_span_is_the_findings_own_lines(tmp_path: Path) -> None:
+    """Context is shown, never replaced.
+
+    This is the correction to the first version of the phase, and it was found
+    in the running application rather than here: asked to replace a whole
+    window, a real model returns only the changed line, which then reads as a
+    proposal to delete the rest of the window. The deletion check threw away a
+    correct fix. The model is now asked the question it can answer.
+    """
     write(tmp_path)
 
     region = read_region(tmp_path, "app.py", 5, 5, context=2)
 
-    assert region.first_line == 3
-    assert region.last_line == 7
-    assert "hashlib.md5" in region.text
-    assert "import hashlib" not in region.text
+    assert region.first_line == 5
+    assert region.last_line == 5
+    assert region.lines == ["    return hashlib.md5(value).hexdigest()\n"]
+    assert region.window_first_line == 3
+    assert region.window_last_line == 7
+    assert len(region.context_before) == 2
+    assert len(region.context_after) == 2
 
 
 def test_context_is_clipped_at_the_edges_of_the_file(tmp_path: Path) -> None:
@@ -53,11 +66,39 @@ def test_context_is_clipped_at_the_edges_of_the_file(tmp_path: Path) -> None:
 
     region = read_region(tmp_path, "app.py", 1, 1, context=50)
 
-    assert region.first_line == 1
-    assert region.last_line == len(SOURCE.splitlines())
+    assert region.window_first_line == 1
+    assert region.window_last_line == len(SOURCE.splitlines())
+    assert region.context_before == []
 
 
-def test_the_numbered_view_starts_at_the_regions_real_first_line(tmp_path: Path) -> None:
+def test_the_prompt_view_fences_off_the_replaceable_lines(tmp_path: Path) -> None:
+    """The markers are how the model knows which lines it may rewrite."""
+    write(tmp_path)
+
+    numbered = read_region(tmp_path, "app.py", 5, 5, context=2).numbered()
+
+    lines = numbered.splitlines()
+    start = next(i for i, line in enumerate(lines) if REPLACE_START in line)
+    end = next(i for i, line in enumerate(lines) if REPLACE_END in line)
+    fenced = lines[start + 1 : end]
+    assert len(fenced) == 1
+    assert "hashlib.md5" in fenced[0]
+    # And the context is outside the fence, where it cannot be mistaken for
+    # something to hand back.
+    assert any("def digest" in line for line in lines[:start])
+
+
+def test_a_multi_line_finding_keeps_all_its_lines_replaceable(tmp_path: Path) -> None:
+    write(tmp_path)
+
+    region = read_region(tmp_path, "app.py", 4, 5, context=1)
+
+    assert region.first_line == 4
+    assert region.last_line == 5
+    assert len(region.lines) == 2
+
+
+def test_the_numbered_view_uses_real_file_line_numbers(tmp_path: Path) -> None:
     """The model is shown file line numbers, not 1..n.
 
     If it were shown 1..n it could not talk about the finding's line, which the
@@ -69,6 +110,7 @@ def test_the_numbered_view_starts_at_the_regions_real_first_line(tmp_path: Path)
 
     first = numbered.splitlines()[0]
     assert first.strip().startswith("3 |")
+    assert any(line.strip().startswith("5 |") for line in numbered.splitlines())
 
 
 # --- refusals -------------------------------------------------------------

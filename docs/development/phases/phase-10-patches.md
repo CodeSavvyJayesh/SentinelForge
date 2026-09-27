@@ -109,6 +109,55 @@ comment saying it fixed it. All three look plausible in a JSON field.
   languages this check does not run, and that is stated in the limitations
   rather than hidden.
 
+## The bug the tests did not find
+
+Phase 10 shipped, and the first real finding it was pointed at — an f-string
+SQL query — came back **refused**: *"the proposed change mostly deletes code."*
+
+The model had done the right thing. Asked to fix line 24, `qwen2.5-coder:7b`
+returned the one corrected line:
+
+```python
+cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+```
+
+But it had been shown line 24 plus six lines either side and told to replace
+*all* of it. One line offered in place of thirteen is, arithmetically, a
+proposal to delete twelve — so the deletion check refused a correct fix.
+
+The test suite could not catch this, and it is worth being precise about why.
+Every fixture returned a replacement for the whole window, because that is what
+the prompt asked for. The tests therefore agreed with the code about a question
+neither of them should have been asking. **A fixture written from the same
+misunderstanding as the implementation tests the misunderstanding.** Nothing in
+a green suite says the model won't behave differently, and mutation testing
+doesn't either — it asks whether a control is *exercised*, not whether the
+control is measuring the right thing.
+
+The fix is to ask the model a question it can answer. It now sees the context
+but is asked to replace only the finding's own lines, fenced off in the prompt:
+
+```
+   23 | def get_user(user_id):
+>>>>>> REPLACE THESE LINES (24 to 24)
+   24 |     cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
+<<<<<< END OF LINES TO REPLACE
+   25 |     return cursor.fetchone()
+```
+
+A one-line fix is then one line, and the size checks measure what they were
+always meant to: the fix against what it replaced.
+
+Two smaller things came out of the same incident:
+
+- **A rejection kept its reason but not the proposal**, so diagnosing this
+  meant inferring what the model had probably returned. `rejected_code` now
+  stores it, the UI shows it behind a disclosure, and it is the failure corpus
+  the evaluation chapter will need.
+- **"Try again" was a lie.** At temperature 0 the model is deterministic, so
+  retrying a refusal reproduced it exactly. Retries now run at 0.3, recorded on
+  the row.
+
 ## Two bugs the tests found
 
 **The CRLF bug, found by a test written to document behaviour that did not
@@ -159,9 +208,9 @@ green suite could not. It keeps being worth the hour.
 | Check | Result |
 | --- | --- |
 | `ruff format` + `ruff check` | clean |
-| Backend tests | **652 passed** (63 new) |
+| Backend tests | **665 passed** (76 new) |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | clean; no drift |
-| Mutation pass | **40/40 controls killed** |
+| Mutation pass | **49/49 controls killed** |
 | `git apply --check` on a generated diff | applies |
 | `tsc --noEmit` | clean |
 | Frontend tests | **83 passed** |

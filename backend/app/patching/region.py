@@ -36,31 +36,76 @@ class RegionError(RuntimeError):
     """The code a finding points at could not be read. Always actionable."""
 
 
+#: Markers that fence off the replaceable lines in the prompt. Deliberately
+#: ugly and unlikely to occur in real code, so the model cannot mistake one for
+#: part of the program.
+REPLACE_START = ">>>>>> REPLACE THESE LINES"
+REPLACE_END = "<<<<<< END OF LINES TO REPLACE"
+
+
 @dataclass(frozen=True)
 class Region:
-    """The slice of a file that a proposal is allowed to change."""
+    """The lines a proposal may change, and the code around them.
+
+    The distinction between the two is the whole point of this class, and it
+    was learned the expensive way. The first version handed the model the
+    finding's line *plus six lines either side* and asked for a replacement of
+    all of it. Small models do not do that: asked to fix one line, they return
+    one line. That answer then looks like a proposal to delete the other twelve,
+    and the deletion check — correctly, by its own lights — threw away a
+    perfectly good fix.
+
+    So context is now shown and never asked for. The model sees enough to know
+    what is in scope and is asked to rewrite only the lines the finding points
+    at, which is the question it can actually answer.
+    """
 
     path: Path
-    # 1-based, inclusive, as a person reads them and as the UI shows them.
+    # The replaceable span: the finding's own lines. 1-based, inclusive, as a
+    # person reads them and as the UI shows them.
     first_line: int
     last_line: int
     lines: list[str]
+    # Shown to the model, never replaced by it.
+    context_before: list[str]
+    context_after: list[str]
     # The whole file, so the patched version can be assembled and diffed.
     file_lines: list[str]
 
     @property
     def text(self) -> str:
+        """Just the replaceable lines."""
         return "".join(self.lines)
 
-    def numbered(self) -> str:
-        """The region with line numbers, for the prompt.
+    @property
+    def window_first_line(self) -> int:
+        return self.first_line - len(self.context_before)
 
-        Numbers are shown so the model can talk about the code, and are
-        deliberately *not* asked for back: it returns the replacement text only.
+    @property
+    def window_last_line(self) -> int:
+        return self.last_line + len(self.context_after)
+
+    def numbered(self) -> str:
+        """Everything shown to the model, with the replaceable part fenced off.
+
+        Line numbers are shown so the model can talk about the code, and are
+        deliberately *not* asked for back — the contract strips them if they
+        come anyway.
         """
-        return "".join(
-            f"{number:>5} | {line}" for number, line in enumerate(self.lines, start=self.first_line)
-        )
+        out: list[str] = []
+        number = self.window_first_line
+        for line in self.context_before:
+            out.append(f"{number:>5} | {line}")
+            number += 1
+        out.append(f"{REPLACE_START} ({self.first_line} to {self.last_line})\n")
+        for line in self.lines:
+            out.append(f"{number:>5} | {line}")
+            number += 1
+        out.append(f"{REPLACE_END}\n")
+        for line in self.context_after:
+            out.append(f"{number:>5} | {line}")
+            number += 1
+        return "".join(out)
 
 
 def read_region(
@@ -109,13 +154,18 @@ def read_region(
             "was found. Scan again first."
         )
 
-    first = max(1, line_start - context)
-    last = min(len(file_lines), max(line_end, line_start) + context)
+    # The replaceable span is the finding's own lines, and nothing more. A
+    # finding whose end line has drifted past the end of the file is clamped
+    # rather than refused: the start line is what the drift check verifies.
+    first = line_start
+    last = min(len(file_lines), max(line_end, line_start))
     return Region(
         path=target,
         first_line=first,
         last_line=last,
         lines=file_lines[first - 1 : last],
+        context_before=file_lines[max(0, first - 1 - context) : first - 1],
+        context_after=file_lines[last : last + context],
         file_lines=file_lines,
     )
 

@@ -1645,3 +1645,18 @@ a.button {
   line-height: 1.5;
   color: var(--color-text-muted);
 }
+
+.patch__rejected {
+  margin-top: var(--space-3);
+  font-size: 0.75rem;
+}
+
+.patch__rejected summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.patch__rejected .patch__diff {
+  margin-top: var(--space-2);
+  white-space: pre-wrap;
+}

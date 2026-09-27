@@ -51,6 +51,14 @@ class PatchRead(BaseModel):
     fences_stripped: bool
     gutters_stripped: int
 
+    # What the model returned when the proposal was refused. Shown behind a
+    # disclosure rather than hidden: "the change mostly deletes code" is a
+    # verdict, and a developer is entitled to see what it was passed on. Null
+    # on success, where the diff is the answer.
+    rejected_code: str | None
+    # Recorded so two runs of the same prompt are distinguishable.
+    temperature: float | None
+
     duration_ms: int | None
     prompt_tokens: int | None
     completion_tokens: int | None

@@ -45,6 +45,23 @@ The end-to-end test runs the result through `git apply --check` against the real
 files, so the claim being tested is "a diff the developer's own tools accept",
 not "a diff was produced".
 
+## The model is asked for as little as possible
+
+It sees the finding's line with six lines of context either side, but it is
+asked to replace **only the finding's own lines**, fenced off in the prompt
+with explicit markers.
+
+That split was learned in production. The first version asked for the whole
+window back, and a model asked to fix one line returns one line — which, against
+a thirteen-line window, is arithmetically a proposal to delete twelve, and the
+deletion check below refused a correct fix. Asking for less makes the obvious
+answer the accepted one, and makes the size checks measure the fix against what
+it actually replaced.
+
+Markers the model echoes back as if they were code are stripped, conservatively:
+only lines that match the marker pattern, never lines that merely contain
+angle brackets.
+
 ## Refusing to patch code that has moved
 
 If the file has been edited since the finding was recorded, a patch built from
@@ -116,6 +133,17 @@ deletion, and cannot make it unparseable.
 What this phase does **not** defend against is a developer who copies a diff
 without reading it. That is stated rather than engineered around, and it is why
 the notice comes before the diff and why there is no Apply button.
+
+## Refusals are shown, not just counted
+
+When a proposal is refused, the model's actual output is stored on the row and
+shown in the UI behind a disclosure. The checks above are heuristics, and a
+heuristic that refuses a correct fix is one a developer should be able to see
+through — *"this mostly deletes code"* is a verdict, and the evidence for it
+belongs next to it.
+
+It is also the only failure data this project will ever have. Nobody can
+reconstruct, after the fact, what a model returned six weeks ago.
 
 ## What Phase 11 has to add
 

@@ -164,13 +164,21 @@ class OllamaClient:
 
     # -- generation --------------------------------------------------------
 
-    def generate(self, prompt: str, *, system: str | None = None) -> Completion:
+    def generate(
+        self, prompt: str, *, system: str | None = None, temperature: float | None = None
+    ) -> Completion:
         """Run one completion, in JSON mode.
 
         ``format: json`` makes the daemon constrain decoding to valid JSON. That
         is a guarantee about *syntax* and nothing else — the object can still
         have the wrong keys, invented citations or a thousand-word field, which
         is why every response goes through the contract module afterwards.
+
+        ``temperature`` overrides the configured default for one call. The
+        default is 0, so that the same finding produces the same answer and an
+        explanation can be quoted in a report — but that also means a retry of
+        a failed generation returns the identical failure. A caller retrying
+        something raises it deliberately.
         """
         body = {
             "model": self.model,
@@ -178,7 +186,7 @@ class OllamaClient:
             "stream": False,
             "format": "json",
             "options": {
-                "temperature": self.temperature,
+                "temperature": self.temperature if temperature is None else temperature,
                 "num_predict": self.max_tokens,
                 "num_ctx": self.context_tokens,
             },

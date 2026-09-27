@@ -38,6 +38,17 @@ export interface Patch {
   fences_stripped: boolean
   gutters_stripped: number
 
+  /**
+   * What the model returned when a proposal was refused.
+   *
+   * Shown behind a disclosure on a failure. "The change mostly deletes code"
+   * is a verdict, and a developer is entitled to see what it was passed on —
+   * especially since that verdict is sometimes wrong about a correct fix.
+   * Null on success, where the diff is the answer.
+   */
+  rejected_code: string | null
+  temperature: number | null
+
   duration_ms: number | null
   prompt_tokens: number | null
   completion_tokens: number | null

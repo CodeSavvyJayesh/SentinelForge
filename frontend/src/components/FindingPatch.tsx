@@ -140,10 +140,27 @@ export function FindingPatch({ findingId }: { findingId: number }) {
       )}
 
       {patch?.status === 'FAILED' && (
-        <ErrorState
-          title="No change was proposed"
-          message={patch.error_message ?? 'Generation did not finish.'}
-        />
+        <>
+          <ErrorState
+            title="No change was proposed"
+            message={patch.error_message ?? 'Generation did not finish.'}
+          />
+          {patch.rejected_code !== null && (
+            // A refusal is a verdict on the model's work, and the check that
+            // produced it is a heuristic that can be wrong about a correct
+            // fix. Showing what was thrown away lets a developer judge the
+            // judgement — and copy it themselves if it was right after all.
+            <details className="patch__rejected">
+              <summary>What the model returned</summary>
+              <pre className="patch__diff">
+                <code className="patch__line patch__line--context">{patch.rejected_code}</code>
+              </pre>
+              <p className="patch__provenance">
+                Not applied and not checked — this is the raw text the proposal was built from.
+              </p>
+            </details>
+          )}
+        </>
       )}
 
       {patch?.status === 'PROPOSED' && patch.diff !== null && (

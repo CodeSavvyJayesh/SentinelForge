@@ -61,6 +61,13 @@ logger = get_logger("sentinelforge.patches")
 # against the file to detect drift.
 REDACTED_RULE_PREFIX = "SEC"
 
+# Temperature for a retry. The first attempt runs at the configured default
+# (0), because a reproducible answer is worth having. But at 0 the model is
+# deterministic, so retrying a failure returns the identical failure — and the
+# UI offering a "Try again" button that cannot produce anything new is a lie
+# told by the interface. A retry therefore asks a slightly different question.
+RETRY_TEMPERATURE = 0.3
+
 
 class PatchNotFoundError(AppError):
     def __init__(self) -> None:
@@ -175,6 +182,11 @@ class PatchService:
             patch.passage_chunk_ids = [item.chunk.id for item in passages]
 
             self.llm.check_ready()
+            # attempts is 1 on the first run, because the claim increments it.
+            temperature = None if patch.attempts <= 1 else RETRY_TEMPERATURE
+            patch.temperature = (
+                temperature if temperature is not None else self.settings.OLLAMA_TEMPERATURE
+            )
             completion = self.llm.generate(
                 patch_prompt.build(
                     finding,
@@ -183,8 +195,13 @@ class PatchService:
                     self._explanation_text(patch.explanation_id),
                 ),
                 system=patch_prompt.SYSTEM_PROMPT,
+                temperature=temperature,
             )
             parsed = parse_patch(completion.text)
+            # Recorded now, cleared on success. A refusal below is then able to
+            # say what the model actually returned rather than only why it was
+            # thrown away.
+            patch.rejected_code = parsed.replacement
 
             after = splice(region, parsed.replacement)
             diff = diffing.build(finding.file_path, region.file_lines, after)
@@ -202,6 +219,7 @@ class PatchService:
             patch.lines_removed = diff.removed
             patch.fences_stripped = parsed.fences_stripped
             patch.gutters_stripped = parsed.gutters_stripped
+            patch.rejected_code = None
             patch.error_message = None
             self._finish(patch, started)
 

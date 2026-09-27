@@ -24,7 +24,7 @@ made into a database column.
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -106,6 +106,16 @@ class Patch(TimestampMixin, Base):
     gutters_stripped: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+
+    # What the model actually returned, kept only when the proposal was
+    # refused. Without it a rejection can only be reasoned about, not read —
+    # the first real refusal in this phase had to be diagnosed by inference.
+    # It is also the failure corpus the evaluation chapter needs, and nobody
+    # collects that after the fact.
+    rejected_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Recorded because it is the difference between two runs of the same
+    # prompt. At 0 a retry is bit-identical, so retries use a little more.
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

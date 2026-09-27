@@ -146,3 +146,37 @@ def test_a_replacement_that_is_only_a_fence_is_refused() -> None:
 def test_an_enormous_replacement_is_refused() -> None:
     with pytest.raises(LlmContractError):
         parse(answer("x = 1\n" * 4000))
+
+
+def test_prompt_markers_handed_back_as_code_are_removed() -> None:
+    """A model that echoes the whole code block returns the fence lines too.
+
+    Left in, they become part of the file. Everything between them is still
+    the answer, so they are stripped rather than refused.
+    """
+    from app.llm.patch_contract import strip_markers
+
+    echoed = ">>>>>> REPLACE THESE LINES (24 to 24)\n    x = 1\n<<<<<< END OF LINES TO REPLACE"
+
+    stripped, removed = strip_markers(echoed)
+
+    assert stripped == "    x = 1"
+    assert removed == 2
+
+
+def test_code_containing_no_markers_is_untouched() -> None:
+    from app.llm.patch_contract import strip_markers
+
+    code = "if a >> b:\n    pass"
+
+    assert strip_markers(code) == (code, 0)
+
+
+def test_markers_are_stripped_by_parse_too() -> None:
+    echoed = (
+        ">>>>>> REPLACE THESE LINES (5 to 5)\n    return sha256(v)\n<<<<<< END OF LINES TO REPLACE"
+    )
+
+    parsed = parse(answer(echoed))
+
+    assert parsed.replacement == "    return sha256(v)"

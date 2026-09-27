@@ -39,6 +39,11 @@ FENCE = re.compile(r"^\s*```[a-zA-Z0-9_+-]*\s*\n(?P<body>.*?)\n?\s*```\s*$", re.
 # "   24 | code" — the gutter this project's own prompt puts in front of the
 # region it shows.
 GUTTER = re.compile(r"^\s*\d+\s*\|\s?")
+# The fences the prompt puts around the replaceable lines. A model that echoes
+# the whole code block back hands these over as if they were source. They are
+# stripped rather than refused, because everything between them is still the
+# answer.
+MARKER = re.compile(r"^\s*(>{6}\s*REPLACE THESE LINES|<{6}\s*END OF LINES TO REPLACE).*$")
 # "Here is the corrected code:" and friends, on their own line before the code.
 PREAMBLE = re.compile(
     r"^\s*(here(?:'s| is)[^\n]*|the (?:fixed|corrected|updated)[^\n]*|sure[^\n]*)[:.]\s*\n",
@@ -92,6 +97,13 @@ def strip_gutters(text: str) -> tuple[str, int]:
     )
 
 
+def strip_markers(text: str) -> tuple[str, int]:
+    """Drop any prompt markers the model handed back as if they were code."""
+    lines = text.split("\n")
+    kept = [line for line in lines if not MARKER.match(line)]
+    return "\n".join(kept), len(lines) - len(kept)
+
+
 def sanitise_code(text: str) -> str:
     """Strip control characters, keeping the ones source code is made of."""
     return "".join(
@@ -119,6 +131,7 @@ def parse(raw: str) -> ParsedPatch:
 
     replacement = PREAMBLE.sub("", draft.replacement)
     replacement, fenced = strip_fences(replacement)
+    replacement, _ = strip_markers(replacement)
     replacement, gutters = strip_gutters(replacement)
     replacement = sanitise_code(replacement).rstrip()
 
@@ -147,4 +160,5 @@ __all__ = [
     "sanitise_code",
     "strip_fences",
     "strip_gutters",
+    "strip_markers",
 ]

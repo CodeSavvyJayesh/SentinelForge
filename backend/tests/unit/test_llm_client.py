@@ -257,3 +257,23 @@ def test_a_base_url_that_is_not_http_is_refused() -> None:
 def test_http_and_https_are_both_accepted() -> None:
     OllamaClient("http://localhost:11434", model="m", timeout_seconds=1)
     OllamaClient("https://ollama.internal", model="m", timeout_seconds=1)
+
+
+def test_the_configured_temperature_is_sent_by_default(serving) -> None:  # noqa: ANN001
+    """Zero by default, so the same finding gives the same answer twice."""
+    server = serving({"body": b'{"response":"{}"}'})
+
+    client_for(server).generate("prompt")
+
+    assert server.http.last_body["options"]["temperature"] == 0.0
+
+
+def test_a_caller_can_raise_the_temperature_for_one_call(serving) -> None:  # noqa: ANN001
+    """Retrying a failed generation at temperature 0 reproduces the failure
+    exactly, which makes a "Try again" button meaningless. A retry says so
+    explicitly rather than the client guessing when to vary."""
+    server = serving({"body": b'{"response":"{}"}'})
+
+    client_for(server).generate("prompt", temperature=0.3)
+
+    assert server.http.last_body["options"]["temperature"] == 0.3

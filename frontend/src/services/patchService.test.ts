@@ -59,6 +59,8 @@ const PATCH: Patch = {
   explanation_id: 3,
   fences_stripped: false,
   gutters_stripped: 0,
+  rejected_code: null,
+  temperature: 0,
   duration_ms: 31_000,
   prompt_tokens: 1200,
   completion_tokens: 210,
@@ -104,6 +106,7 @@ describe('patchService', () => {
         status: 'FAILED',
         diff: null,
         error_message: 'The proposed change mostly deletes code.',
+        rejected_code: '    return hashlib.sha256(value).hexdigest()',
       }),
     ])
 
@@ -111,6 +114,9 @@ describe('patchService', () => {
 
     expect(result?.status).toBe('FAILED')
     expect(result?.error_message).toContain('mostly deletes code')
+    // The refusal carries what was thrown away. That check is a heuristic and
+    // can be wrong about a correct fix, so the panel shows the evidence.
+    expect(result?.rejected_code).toContain('sha256')
   })
 
   it('surfaces a refused second request with its code', async () => {

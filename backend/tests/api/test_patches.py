@@ -50,14 +50,18 @@ def other():
     return 1
 """
 
-# The model is asked for the replacement of the WHOLE region it was shown, and
-# with six lines of context either side of line 5 that region is the whole of
-# this short file. A test that returns only the two changed lines is proposing
-# a deletion of everything else — which the checks correctly refuse, and which
-# is how these fixtures were wrong the first time.
-FIXED_REGION = VULNERABLE.replace("hashlib.md5", "hashlib.sha256")
-UNCHANGED_REGION = VULNERABLE
-BROKEN_REGION = VULNERABLE.replace("def digest(value):", "def digest(value:")
+# The finding is one line, so a fix is one line. The model is shown the code
+# around it and asked to replace only the marked lines.
+#
+# The first version of this phase asked for the whole window back, and these
+# fixtures returned the whole file to match. That was wrong in the same way the
+# design was wrong: a real model, asked to fix one line, returns one line — and
+# against a thirteen-line window that reads as a deletion, so the checks threw
+# away a correct fix. The refusal was observed in the running application
+# before it was understood here.
+FIXED_LINE = "    return hashlib.sha256(value).hexdigest()"
+UNCHANGED_LINE = "    return hashlib.md5(value).hexdigest()"
+BROKEN_LINE = "    return hashlib.sha256(value"
 
 CORPUS = [
     SourceDocument(
@@ -75,7 +79,7 @@ CORPUS = [
 ]
 
 
-def patch_response(replacement: str = FIXED_REGION, rationale: str = "Uses SHA-256.") -> str:
+def patch_response(replacement: str = FIXED_LINE, rationale: str = "Uses SHA-256.") -> str:
     return json.dumps({"replacement": replacement, "rationale": rationale})
 
 
@@ -360,9 +364,7 @@ def test_a_model_that_returns_the_code_unchanged_is_refused(
     workspace_root: Path,
 ) -> None:
     build_knowledge(db_session, stub_embedder)
-    fake_llm.response = patch_response(
-        replacement=UNCHANGED_REGION, rationale="I fixed the hashing."
-    )
+    fake_llm.response = patch_response(replacement=UNCHANGED_LINE, rationale="I fixed the hashing.")
     token = sign_up(api_client, "nochange")
     finding = make_finding(api_client, db_session, token, workspace_root, line_start=5, line_end=5)
 
@@ -387,8 +389,10 @@ def test_a_model_that_deletes_the_code_is_refused(
     scan, so Phase 11 would certify it as a fix. It has to be caught here.
     """
     build_knowledge(db_session, stub_embedder)
-    long_source = "import hashlib\n" + "".join(f"def f{n}():\n    pass\n" for n in range(12))
-    fake_llm.response = patch_response(replacement="pass\n", rationale="Removed it.")
+    # A finding that legitimately spans a block — the analyser flags the whole
+    # credential list, not one line of it.
+    long_source = "import os\n" + "".join(f'SECRET_{n} = "value-{n}"\n' for n in range(12))
+    fake_llm.response = patch_response(replacement="pass", rationale="Removed it.")
     token = sign_up(api_client, "deleter")
     finding = make_finding(
         api_client,
@@ -396,9 +400,9 @@ def test_a_model_that_deletes_the_code_is_refused(
         token,
         workspace_root,
         source=long_source,
-        line_start=8,
-        line_end=8,
-        snippet="pass",
+        line_start=2,
+        line_end=13,
+        snippet='SECRET_0 = "value-0"',
     )
 
     body = propose(api_client, token, finding.id, patch_worker)
@@ -416,7 +420,7 @@ def test_a_patch_that_breaks_python_syntax_is_refused(
     workspace_root: Path,
 ) -> None:
     build_knowledge(db_session, stub_embedder)
-    fake_llm.response = patch_response(replacement=BROKEN_REGION)
+    fake_llm.response = patch_response(replacement=BROKEN_LINE)
     token = sign_up(api_client, "broken")
     finding = make_finding(api_client, db_session, token, workspace_root)
 
@@ -651,3 +655,174 @@ def test_a_crashed_run_is_requeued_and_then_given_up_on(
 
     assert patch.status is PatchStatus.FAILED
     assert "giving up" in patch.error_message
+
+
+# --- the refusal seen in the running application --------------------------
+
+
+def test_a_one_line_fix_for_a_one_line_finding_is_accepted(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The regression test for the bug this phase shipped with.
+
+    A real qwen2.5-coder:7b, asked to fix an f-string SQL query, returned the
+    single corrected line — the right answer. Against the whole thirteen-line
+    window it was asked to replace, that read as deleting twelve lines, and the
+    deletion check refused it. The user saw "the proposed change mostly deletes
+    code" for a correct fix.
+
+    The model is now asked only for the marked lines, so the obvious answer is
+    also the accepted one.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement=FIXED_LINE)
+    token = sign_up(api_client, "oneliner")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.PROPOSED, body["error_message"]
+    assert body["lines_added"] == 1
+    assert body["lines_removed"] == 1
+
+
+def test_the_prompt_asks_for_the_marked_lines_only(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """Context is shown outside the markers; only the finding's line is inside."""
+    from app.patching.region import REPLACE_END, REPLACE_START
+
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response()
+    token = sign_up(api_client, "marked")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    propose(api_client, token, finding.id, patch_worker)
+
+    prompt = fake_llm.prompts[-1]
+    lines = prompt.splitlines()
+    start = next(i for i, line in enumerate(lines) if REPLACE_START in line)
+    end = next(i for i, line in enumerate(lines) if REPLACE_END in line)
+    assert end - start == 2, "exactly one line should be inside the markers"
+    assert "hashlib.md5" in lines[start + 1]
+    assert any("def digest" in line for line in lines[:start])
+
+
+def test_a_refused_proposal_keeps_what_the_model_returned(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """A rejection that keeps only its reason cannot be diagnosed.
+
+    The first real refusal in this project had to be worked out by inference,
+    because the row recorded why the proposal was thrown away but not the
+    proposal. It is also the failure data the evaluation needs.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement=UNCHANGED_LINE)
+    token = sign_up(api_client, "diagnosable")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+    queued = api_client.post(f"/api/v1/findings/{finding.id}/patch", headers=auth(token)).json()
+    patch_worker.drain()
+
+    from app.models import Patch as PatchRow
+
+    stored = db_session.get(PatchRow, queued["id"])
+    db_session.refresh(stored)
+
+    assert stored.status is PatchStatus.FAILED
+    assert stored.rejected_code == UNCHANGED_LINE
+
+
+def test_a_successful_proposal_keeps_no_rejected_code(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response()
+    token = sign_up(api_client, "clean")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+    queued = api_client.post(f"/api/v1/findings/{finding.id}/patch", headers=auth(token)).json()
+    patch_worker.drain()
+
+    from app.models import Patch as PatchRow
+
+    stored = db_session.get(PatchRow, queued["id"])
+    db_session.refresh(stored)
+
+    assert stored.status is PatchStatus.PROPOSED
+    assert stored.rejected_code is None
+
+
+def test_the_first_attempt_is_deterministic(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """Temperature 0 on the first run, so the same finding gives the same fix."""
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response()
+    token = sign_up(api_client, "deterministic")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    propose(api_client, token, finding.id, patch_worker)
+
+    assert fake_llm.temperatures[-1] is None  # the configured default, which is 0
+
+
+def test_a_retry_is_not_bit_identical_to_the_attempt_that_failed(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """At temperature 0 a retry returns the identical failure.
+
+    The UI offers "Try again" after a refusal. If that button could only ever
+    reproduce the same rejection, it would be the interface telling a lie, so a
+    retry asks a slightly different question.
+    """
+    from app.services.patch_service import RETRY_TEMPERATURE
+
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response()
+    token = sign_up(api_client, "retrier")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+    queued = api_client.post(f"/api/v1/findings/{finding.id}/patch", headers=auth(token)).json()
+
+    # Put the row back in the queue as a second attempt, the way the stale
+    # sweep does after an interrupted run.
+    from app.models import Patch as PatchRow
+
+    row = db_session.get(PatchRow, queued["id"])
+    row.status = PatchStatus.QUEUED
+    row.attempts = 1
+    db_session.flush()
+    patch_worker.drain()
+
+    assert fake_llm.temperatures[-1] == RETRY_TEMPERATURE
+    db_session.refresh(row)
+    assert row.temperature == RETRY_TEMPERATURE
