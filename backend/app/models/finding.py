@@ -16,6 +16,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.base import Base
 from app.models.mixins import TimestampMixin
 
+# Hard-coded credentials, by weakness rather than by rule id, so a rule added
+# later is covered without anybody remembering to list it. Every analyser that
+# reports one of these redacts the value before the finding is stored.
+CREDENTIAL_CWE = "CWE-798"
+
 
 class Severity(StrEnum):
     CRITICAL = "CRITICAL"
@@ -114,6 +119,18 @@ class Finding(TimestampMixin, Base):
     patches: Mapped[list["Patch"]] = relationship(  # noqa: F821
         back_populates="finding", cascade="all, delete-orphan", passive_deletes=True
     )
+
+    @property
+    def is_credential(self) -> bool:
+        """A secret in the code, as opposed to a flaw in it.
+
+        The distinction changes what can be done about it. A flaw is fixed by
+        changing the code. A leaked credential is not: it is in every clone and
+        in the history, so the only fix is to rotate it — and a proposed diff
+        would have to quote it, undoing the redaction that keeps secrets out of
+        this database.
+        """
+        return self.cwe_id == CREDENTIAL_CWE
 
     def __repr__(self) -> str:
         return (

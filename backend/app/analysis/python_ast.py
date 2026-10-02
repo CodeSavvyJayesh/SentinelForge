@@ -359,7 +359,14 @@ def _is_built_string(node: ast.AST) -> bool:
         return True
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add | ast.Mod):
         return True
-    return bool(isinstance(node, ast.Call) and _call_name(node.func or node).endswith(".format"))
+    # Matched on the attribute itself, not on a dotted name. `_call_name` cannot
+    # name a call on a literal — `"SELECT …".format(x)` has no name to its left —
+    # so going through it missed the most common way `.format()` is written.
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+    )
 
 
 def _looks_like_sql(node: ast.AST) -> bool:

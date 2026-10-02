@@ -184,6 +184,14 @@ class Settings(BaseSettings):
     # unchanged — and each attempt costs a minute of CPU.
     PATCH_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=10)
 
+    # The validation worker needs no model at all — it is the analyser run
+    # twice on a throwaway copy — so its windows are the scan worker's sizes,
+    # not the model workers'.
+    VALIDATION_WORKER_ENABLED: bool = True
+    VALIDATION_POLL_INTERVAL_SECONDS: float = Field(default=1.0, gt=0, le=60)
+    VALIDATION_STALE_AFTER_SECONDS: int = Field(default=300, ge=30)
+    VALIDATION_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=10)
+
     # --- Logging -----------------------------------------------------------
     LOG_LEVEL: LogLevel = "INFO"
     LOG_FORMAT: LogFormat = "json"

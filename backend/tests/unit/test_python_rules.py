@@ -187,6 +187,28 @@ def test_a_percent_formatted_query_is_reported() -> None:
     assert "PY010" in rules_for(source)
 
 
+def test_a_query_built_with_format_on_a_literal_is_reported() -> None:
+    """The form the rule's own docstring promised and did not deliver.
+
+    `"SELECT …".format(x)` is a call on a literal, and a literal has no dotted
+    name, so the check that looked for a name ending in `.format` never matched
+    the commonest way it is written. Found in Phase 11, when a model's "fix"
+    that swapped an f-string for `.format()` would have been validated: a
+    re-scan is only as good as the rules it re-runs.
+    """
+    source = 'cursor.execute("SELECT * FROM users WHERE id = {}".format(user_id))\n'
+    assert "PY010" in rules_for(source)
+
+
+def test_a_query_built_with_format_on_a_variable_is_reported() -> None:
+    source = 'cursor.execute("SELECT * FROM {} WHERE id = 1".format(table).format(x))\n'
+    assert "PY010" in rules_for(source)
+
+
+def test_format_on_something_that_is_not_sql_is_not_reported() -> None:
+    assert "PY010" not in rules_for('runner.execute("job-{}".format(job_id))\n')
+
+
 def test_a_parameterised_query_is_not_reported() -> None:
     source = 'cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))\n'
     assert "PY010" not in rules_for(source)

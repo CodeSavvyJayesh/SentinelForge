@@ -281,3 +281,58 @@ def test_one_line_produces_one_credential_finding() -> None:
     """A specific rule wins; the generic rule must not double-report."""
     rule_ids = [f.rule_id for f in analyze_secrets(f"AWS_SECRET_ACCESS_KEY={AWS_KEY}\n", ".env")]
     assert rule_ids == ["SEC001"]
+
+
+# --- a reference with a hard-coded fallback ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "JWT_SECRET=${JWT_SECRET:-'default_secret'}",
+        "JWT_SECRET=${JWT_SECRET:-default_secret}",
+        'JWT_SECRET="${JWT_SECRET:-default_secret}"',
+        "export API_KEY=${API_KEY:=abcd1234efgh}",
+    ],
+)
+def test_a_shell_default_is_still_a_hardcoded_credential(line: str) -> None:
+    """``${NAME:-fallback}`` reads like "taken from the environment".
+
+    It is a hard-coded credential whenever the variable is unset — which, in a
+    committed .env file, is the normal case. The first form here is, verbatim,
+    what a real model wrote when asked to fix a hard-coded JWT secret; because
+    the value began with ``${`` it was dismissed as a reference, the finding
+    disappeared, and the "fix" was validated.
+    """
+    findings = analyze_secrets(line, ".env")
+
+    assert [finding.rule_id for finding in findings] == ["SEC005"]
+
+
+def test_the_fallback_is_what_gets_redacted() -> None:
+    finding = analyze_secrets("JWT_SECRET=${JWT_SECRET:-'default_secret'}", ".env")[0]
+
+    assert "default_secret" not in finding.snippet
+    assert "redacted" in finding.snippet
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "JWT_SECRET=${JWT_SECRET}",  # a reference, and nothing else
+        "JWT_SECRET=${JWT_SECRET:-}",  # an empty fallback is not a secret
+        "JWT_SECRET=${JWT_SECRET:-changeme_please}",  # a placeholder, as elsewhere
+    ],
+)
+def test_a_plain_reference_is_still_not_reported(line: str) -> None:
+    assert analyze_secrets(line, ".env") == []
+
+
+@pytest.mark.parametrize("file_path", ["docker/entrypoint", "Makefile", "scripts/deploy.sh"])
+def test_a_shell_default_is_a_credential_wherever_it_is_written(file_path: str) -> None:
+    """Not only in .env files. A whole line of `NAME=${NAME:-literal}` is shell
+    syntax, and it hard-codes the fallback in an entrypoint script or a Makefile
+    exactly as it does in a .env."""
+    findings = analyze_secrets("API_TOKEN=${API_TOKEN:-dev-token-12345}", file_path)
+
+    assert [finding.rule_id for finding in findings] == ["SEC005"]

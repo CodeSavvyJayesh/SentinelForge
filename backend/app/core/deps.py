@@ -28,6 +28,7 @@ from app.services.auth_service import AuthService, RequestContext
 from app.services.explanation_service import ExplanationService
 from app.services.knowledge_service import KnowledgeService
 from app.services.patch_service import PatchService
+from app.services.patch_validation_service import PatchValidationService
 from app.services.project_service import ProjectService
 from app.services.repository_service import RepositoryService
 from app.services.risk_service import RiskService
@@ -193,6 +194,13 @@ def get_patch_service(
 
 
 PatchServiceDep = Annotated[PatchService, Depends(get_patch_service)]
+
+
+def get_patch_validation_service(db: DbSession, settings: AppSettings) -> PatchValidationService:
+    return PatchValidationService(db, settings)
+
+
+PatchValidationServiceDep = Annotated[PatchValidationService, Depends(get_patch_validation_service)]
 
 
 def get_current_user(

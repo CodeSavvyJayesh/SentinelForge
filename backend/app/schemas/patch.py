@@ -1,9 +1,15 @@
 """Patch response schema.
 
-The shape is built round one claim the API is careful never to make: that this
-code is correct. ``status`` never reaches "applied" or "verified" in this phase,
-``validated`` is always ``False``, and the counters say how much the model's
-output had to be cleaned before it could be treated as code.
+The shape is built round one claim the API is careful about: whether this code
+has been checked, and by what. ``status`` says whether a proposal exists.
+``validated`` is true only when the most recent re-scan of a throwaway copy
+passed every check — it is derived from that validation row on every read, and
+there is no column anybody could set by hand. ``validation`` carries the checks
+themselves, so a verdict never travels without its evidence.
+
+Even then ``validated`` means something narrow: the finding is no longer
+detected, nothing new is, and the change is not a deletion. It does not mean
+the program still behaves the same, and nothing here says so.
 
 The diff is returned as text rather than parsed into hunks. It came from
 ``difflib``, so it is already in the format every developer tool understands,
@@ -15,6 +21,44 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.models.patch import PatchStatus
+from app.models.patch_validation import PatchValidationStatus
+
+
+class ValidationCheck(BaseModel):
+    """One thing the re-scan tested, and how it came out."""
+
+    key: str
+    # "passed", "failed" or "skipped". Skipped is shown, not hidden: "this was
+    # not checked for Java" is information a reviewer needs.
+    outcome: str
+    detail: str
+
+
+class NewFinding(BaseModel):
+    """Something the patched copy has that the original did not."""
+
+    rule_id: str
+    title: str
+    severity: str
+    file_path: str
+    line: int
+
+
+class PatchValidationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: PatchValidationStatus
+    attempts: int
+    checks: list[ValidationCheck]
+    findings_before: int | None
+    findings_after: int | None
+    also_resolved: int
+    new_findings: list[NewFinding]
+    duration_ms: int | None
+    error_message: str | None
+    created_at: datetime
+    finished_at: datetime | None
 
 
 class PatchRead(BaseModel):
@@ -34,10 +78,12 @@ class PatchRead(BaseModel):
     lines_added: int
     lines_removed: int
 
-    # Always False in this phase. It is a field rather than an omission so the
-    # frontend renders the warning from data, and so Phase 11 has somewhere to
-    # put the answer instead of changing the contract.
+    # True only when the latest re-scan of a throwaway copy passed every check.
+    # Derived on each read from that validation; never stored on the patch.
     validated: bool
+    # The latest validation, whatever state it is in — including "could not be
+    # checked", which is not the same as "checked and rejected".
+    validation: PatchValidationRead | None
 
     # Provenance, same reasoning as explanations: a proposal with no origin is
     # one a developer cannot weigh.
@@ -68,4 +114,4 @@ class PatchRead(BaseModel):
     finished_at: datetime | None
 
 
-__all__ = ["PatchRead"]
+__all__ = ["NewFinding", "PatchRead", "PatchValidationRead", "ValidationCheck"]

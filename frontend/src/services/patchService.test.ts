@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import { createApiClient, type FetchLike } from './apiClient'
-import { createPatchService, PATCH_POLL_INTERVAL_MS } from './patchService'
-import { parseDiff, type Patch } from '../types/patch'
+import {
+  createPatchService,
+  PATCH_POLL_INTERVAL_MS,
+  VALIDATION_POLL_INTERVAL_MS,
+} from './patchService'
+import {
+  isSettling,
+  parseDiff,
+  validationState,
+  type Patch,
+  type PatchValidation,
+} from '../types/patch'
 
 interface Call {
   url: string
@@ -54,6 +64,7 @@ const PATCH: Patch = {
   lines_added: 1,
   lines_removed: 1,
   validated: false,
+  validation: null,
   model: 'qwen2.5-coder:7b',
   prompt_version: 1,
   explanation_id: 3,
@@ -192,5 +203,114 @@ describe('parseDiff', () => {
     // is shown as context rather than acted upon.
     expect(() => parseDiff('')).not.toThrow()
     expect(parseDiff('nonsense')[0]?.kind).toBe('context')
+  })
+})
+
+const VALIDATION: PatchValidation = {
+  id: 9,
+  status: 'PASSED',
+  attempts: 1,
+  checks: [
+    { key: 'target_resolved', outcome: 'passed', detail: 'PY007 is no longer detected.' },
+    { key: 'no_new_findings', outcome: 'passed', detail: 'Nothing new.' },
+    { key: 'not_a_deletion', outcome: 'passed', detail: 'The change replaces code with code.' },
+    { key: 'still_parses', outcome: 'skipped', detail: 'Only Python is parsed here.' },
+  ],
+  findings_before: 2,
+  findings_after: 1,
+  also_resolved: 0,
+  new_findings: [],
+  duration_ms: 7,
+  error_message: null,
+  created_at: '2026-10-02T10:00:00Z',
+  finished_at: '2026-10-02T10:00:00Z',
+}
+
+function withValidation(status: PatchValidation['status'], validated: boolean): Patch {
+  return { ...PATCH, validated, validation: { ...VALIDATION, status } }
+}
+
+describe('patch validation', () => {
+  it('queues a re-scan with a POST and accepts the 202', async () => {
+    const { service, calls } = recordingService([
+      json(withValidation('QUEUED', false), 202),
+    ])
+
+    const result = await service.requestValidation(5)
+
+    expect(calls[0]?.url).toBe('http://api.test/api/v1/patches/5/validation')
+    expect(calls[0]?.init.method).toBe('POST')
+    expect(result.validation?.status).toBe('QUEUED')
+    // Queued is not validated.
+    expect(result.validated).toBe(false)
+  })
+
+  it('surfaces a refusal to check a patch that was never proposed', async () => {
+    const { service } = recordingService([
+      json({ error: { code: 'PATCH_NOT_VALIDATABLE', message: 'Only a proposed change…' } }, 409),
+    ])
+
+    await expect(service.requestValidation(5)).rejects.toMatchObject({
+      code: 'PATCH_NOT_VALIDATABLE',
+      status: 409,
+    })
+  })
+
+  it('polls a re-scan faster than a generation', () => {
+    // The check takes milliseconds; the model takes a minute.
+    expect(VALIDATION_POLL_INTERVAL_MS).toBe(1_000)
+    expect(VALIDATION_POLL_INTERVAL_MS < PATCH_POLL_INTERVAL_MS).toBe(true)
+  })
+})
+
+describe('validationState', () => {
+  it('is unchecked when no validation has ever been made', () => {
+    expect(validationState(PATCH)).toBe('unchecked')
+  })
+
+  it('is checking while a re-scan is queued or running', () => {
+    expect(validationState(withValidation('QUEUED', false))).toBe('checking')
+    expect(validationState(withValidation('RUNNING', false))).toBe('checking')
+  })
+
+  it('is validated only when the check passed and the server agrees', () => {
+    expect(validationState(withValidation('PASSED', true))).toBe('validated')
+  })
+
+  it('does not call a passed check validated if the server did not', () => {
+    // The two should never disagree. If they do, the cautious reading wins:
+    // the panel must not print a verdict the server did not give.
+    expect(validationState(withValidation('PASSED', false))).toBe('undetermined')
+  })
+
+  it('is rejected when the re-scan contradicted the change', () => {
+    expect(validationState(withValidation('REJECTED', false))).toBe('rejected')
+  })
+
+  it('keeps "could not be checked" apart from "rejected"', () => {
+    // A stale workspace says nothing about the patch. Showing it as a
+    // rejection would blame the change for something it did not do.
+    expect(validationState(withValidation('FAILED', false))).toBe('undetermined')
+  })
+})
+
+describe('isSettling', () => {
+  it('keeps polling while the model is still writing', () => {
+    expect(isSettling({ ...PATCH, status: 'RUNNING', diff: null })).toBe(true)
+  })
+
+  it('keeps polling while the re-scan is still running', () => {
+    expect(isSettling(withValidation('RUNNING', false))).toBe(true)
+  })
+
+  it('stops once there is a verdict, whichever it is', () => {
+    expect(isSettling(withValidation('PASSED', true))).toBe(false)
+    expect(isSettling(withValidation('REJECTED', false))).toBe(false)
+    expect(isSettling(withValidation('FAILED', false))).toBe(false)
+  })
+
+  it('stops for a proposal that was never checked', () => {
+    // Nothing is in flight; polling forever would hammer the API for nothing.
+    expect(isSettling(PATCH)).toBe(false)
   })
 })

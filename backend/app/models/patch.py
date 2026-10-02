@@ -124,6 +124,9 @@ class Patch(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     finding: Mapped["Finding"] = relationship(back_populates="patches")  # noqa: F821
+    validations: Mapped[list["PatchValidation"]] = relationship(  # noqa: F821
+        back_populates="patch", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     @property
     def is_active(self) -> bool:

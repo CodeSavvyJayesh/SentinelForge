@@ -152,11 +152,28 @@ belongs next to it.
 It is also the only failure data this project will ever have. Nobody can
 reconstruct, after the fact, what a model returned six weeks ago.
 
-## What Phase 11 has to add
+## Credentials are not patched
 
-- apply the patch to a **copy**, never the workspace;
-- re-scan the copy, and compare findings before and after;
-- treat "the finding disappeared" as necessary but not sufficient — the deletion
-  check above is the reason;
-- record the verdict where the UI can show it, and only then let anything say a
-  patch was validated.
+No change is proposed for a hard-coded credential (CWE-798). Three reasons, any
+one of which would be enough:
+
+- **It is not fixable by an edit.** The secret is in every clone and in the
+  history. The fix is to rotate it.
+- **A diff must quote the line it replaces.** Proposing one stored the secret in
+  `patches.diff` and showed it on screen, undoing the redaction every finding
+  gets before it is stored.
+- **Models answer with another secret.** Asked to fix `JWT_SECRET=…`, a real
+  model wrote `JWT_SECRET=${JWT_SECRET:-'default_secret'}`.
+
+The API refuses the request with the advice, the worker refuses a request
+queued before the rule existed without sending the file to the model, and the
+interface shows the advice instead of a button.
+
+## What happens next
+
+Every proposal is validated automatically: applied to a throwaway copy and
+scanned again. That is Phase 11, and it has its own page —
+[validating a fix](validation.md) — including the ways a finding can disappear
+without anything having been fixed, and the one-for-one "replace it with `pass`"
+deletion that the size check above cannot see and a second check now refuses
+both here and there.

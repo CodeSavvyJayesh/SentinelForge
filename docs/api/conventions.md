@@ -264,17 +264,49 @@ the command that fixes it instead of showing an empty panel.
 | `POST /api/v1/findings/{id}/patch` | Bearer | **202 Accepted** — queues a generation; **409** when one is already running or the finding cannot be patched |
 | `GET /api/v1/patches/{id}` | Bearer | poll this while the status is `QUEUED` or `RUNNING` |
 | `GET /api/v1/findings/{id}/patch` | Bearer | the latest attempt, or **204** when one was never requested |
+| `POST /api/v1/patches/{id}/validation` | Bearer | **202 Accepted** — queues a re-scan of a proposal; **409** when one is already pending or there is no proposal to check |
 
 Same 202-and-poll shape, and the same reasoning. What matters more here is what
 is **absent**: there is no endpoint that applies a patch, none that writes to
 the workspace, and none that marks a finding fixed. A client can ask for a
 proposal and read it.
 
-`status` reaches `PROPOSED` and no further, and `validated` is `false` on every
-response — hard-coded in the serializer rather than read from a column, so no
-row can be edited into claiming otherwise. Turning a proposal into a change is
-Phase 11's problem, and it does that by applying the diff to a copy and
-re-scanning, never by trusting this text.
+`status` reaches `PROPOSED` and no further: a patch is a proposal. Whether it
+holds up is a separate fact, recorded separately. Every proposal is checked
+automatically — the diff is applied to a throwaway copy and the analyser runs
+again — and the result is returned inside the patch:
+
+```json
+{"id": 7, "status": "PROPOSED", "validated": true,
+ "validation": {
+   "status": "PASSED", "findings_before": 3, "findings_after": 2, "duration_ms": 4,
+   "checks": [
+     {"key": "target_resolved", "outcome": "passed", "detail": "The original PY007 finding is gone."},
+     {"key": "no_new_findings", "outcome": "passed", "detail": "The re-scan detects nothing that was not there before."},
+     {"key": "not_a_deletion",  "outcome": "passed", "detail": "The change replaces code with code."},
+     {"key": "still_parses",    "outcome": "passed", "detail": "The patched file still parses as Python."}
+   ],
+   "new_findings": [], "also_resolved": 0, "error_message": null}}
+```
+
+- `validated` is **derived on every read** from the latest validation: true only
+  while it is `PASSED`. There is no column that stores it, so nothing can be
+  edited into claiming it and nothing goes stale when a later check disagrees.
+- `validation.status` separates two things: `REJECTED` is a verdict (the re-scan
+  contradicts the change); `FAILED` is not one (the check could not be made —
+  the stored code moved, say) and its `checks` are empty.
+- A check's `outcome` is `passed`, `failed` or `skipped`. Skipped is returned,
+  not omitted: "the syntax was not checked for Java" is information.
+- A passed validation **does not change the finding**. The repository's real
+  code is unchanged, so the finding stays open and the risk score stays where
+  it is until a scan of the real code stops detecting it.
+
+Poll `GET /api/v1/patches/{id}` while `validation.status` is `QUEUED` or
+`RUNNING`; a check takes milliseconds, so a one-second interval is enough.
+
+Findings carry `is_credential`. When it is true, `POST …/patch` answers **409
+`FINDING_NOT_PATCHABLE`** with what to do instead: a leaked credential is
+rotated, not edited, and a diff for one would have to quote the secret.
 
 A `FAILED` patch carries the reason in `error_message`, and the reasons are
 written for the developer: *"the model returned the same code"*, *"the proposed

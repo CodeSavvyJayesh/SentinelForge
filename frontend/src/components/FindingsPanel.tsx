@@ -362,7 +362,7 @@ function FindingCard({ finding }: { finding: Finding }) {
           <FindingExplanation findingId={finding.id} />
           {/* The proposal comes last, after the sources and the explanation:
               a fix should be read by somebody who already knows what is wrong. */}
-          <FindingPatch findingId={finding.id} />
+          <FindingPatch findingId={finding.id} credential={finding.is_credential} />
         </div>
       )}
     </li>

@@ -111,7 +111,7 @@ def make_finding(
     relative = f"project-{project_id}/repo-patch"
     workspace = workspace_root / relative
     (workspace / "src").mkdir(parents=True, exist_ok=True)
-    (workspace / "src" / "hash.py").write_text(source, encoding="utf-8")
+    (workspace / "src" / "hash.py").write_bytes(source.encode("utf-8"))
 
     repository = Repository(
         project_id=project_id,
@@ -289,10 +289,11 @@ def test_a_proposal_is_never_reported_as_validated(
     patch_worker,
     workspace_root: Path,
 ) -> None:
-    """Nothing in this phase can say a patch works.
+    """Generating a patch says nothing about whether it works.
 
-    `validated` is False on a successful proposal, and the status vocabulary
-    has no APPLIED in it. Phase 11 earns those by re-scanning a copy.
+    `validated` is False on a fresh proposal — its validation is queued, not
+    run — and the status vocabulary has no APPLIED in it. The word is earned
+    only by the re-scan of a copy, which `test_patch_validation.py` covers.
     """
     build_knowledge(db_session, stub_embedder)
     fake_llm.response = patch_response()
@@ -876,3 +877,126 @@ def test_a_well_formed_fix_is_not_reported_as_reindented(
 
     assert body["status"] == PatchStatus.PROPOSED
     assert body["reindented"] is False
+
+
+def test_a_model_that_swaps_the_code_for_a_no_op_is_refused(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The tidy deletion: one line out, ``pass`` in.
+
+    The size check passes it — net change zero — and the finding would be gone
+    on a re-scan. It is refused before anybody is shown it, and again by
+    validation in Phase 11 from the diff itself.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement="    pass", rationale="Removed the hash.")
+    token = sign_up(api_client, "noop")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.FAILED
+    assert "nothing that runs" in body["error_message"]
+    assert body["diff"] is None
+
+
+# --- credentials are not patched ---------------------------------------------
+
+
+def credential_finding(client, db, token, workspace_root):  # noqa: ANN001, ANN201
+    return make_finding(
+        client,
+        db,
+        token,
+        workspace_root,
+        source="PORT=3000\nJWT_SECRET=s3cr3t_value_42\n",
+        rule_id="SEC005",
+        title="Possible hardcoded credential",
+        cwe_id="CWE-798",
+        owasp_category="A07:2021 Identification and Authentication Failures",
+        line_start=2,
+        line_end=2,
+        snippet="JWT_SECRET = s3cr…<redacted 15 chars>",
+    )
+
+
+def test_no_change_is_proposed_for_a_leaked_credential(
+    api_client: TestClient, db_session: Session, stub_embedder, fake_llm, workspace_root: Path
+) -> None:
+    """A credential is rotated, not edited.
+
+    Found on the first real proposal for one. The diff quoted the secret — so
+    it was stored in plain text and shown on screen, undoing the redaction
+    Phase 5 applies to every finding — and the "fix" was a different hard-coded
+    secret. The request is refused before anything is queued.
+    """
+    token = sign_up(api_client, "credential")
+    finding = credential_finding(api_client, db_session, token, workspace_root)
+
+    response = api_client.post(f"/api/v1/findings/{finding.id}/patch", headers=auth(token))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "FINDING_NOT_PATCHABLE"
+    assert "Rotate it" in response.json()["error"]["message"]
+    assert db_session.query(Patch).filter(Patch.finding_id == finding.id).count() == 0
+    assert not fake_llm.prompts
+
+
+def test_a_credential_never_reaches_the_model_or_the_patches_table(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The worker refuses too, for a request queued before the rule existed.
+
+    The secret must not be sent to the model, and must not come back in a diff
+    or in the stored copy of a rejected answer.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement="JWT_SECRET=${JWT_SECRET:-'default_secret'}")
+    token = sign_up(api_client, "credentialqueued")
+    finding = credential_finding(api_client, db_session, token, workspace_root)
+    queued = Patch(finding_id=finding.id, status=PatchStatus.QUEUED)
+    db_session.add(queued)
+    db_session.flush()
+
+    patch_worker.drain()
+    db_session.refresh(queued)
+
+    assert queued.status is PatchStatus.FAILED
+    assert "Rotate it" in queued.error_message
+    assert not fake_llm.prompts, "the file containing the secret was sent to the model"
+    assert queued.diff is None
+    assert queued.rejected_code is None
+
+
+def test_a_finding_says_whether_it_is_a_credential(
+    api_client: TestClient, db_session: Session, stub_embedder, workspace_root: Path
+) -> None:
+    """The interface decides what to offer from this, not from a rule-id list
+    of its own that would drift from the server's."""
+    token = sign_up(api_client, "flagged")
+    secret = credential_finding(api_client, db_session, token, workspace_root)
+
+    body = api_client.get(f"/api/v1/findings/{secret.id}", headers=auth(token)).json()
+
+    assert body["is_credential"] is True
+
+
+def test_an_ordinary_finding_is_not_a_credential(
+    api_client: TestClient, db_session: Session, stub_embedder, workspace_root: Path
+) -> None:
+    token = sign_up(api_client, "notflagged")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = api_client.get(f"/api/v1/findings/{finding.id}", headers=auth(token)).json()
+
+    assert body["is_credential"] is False

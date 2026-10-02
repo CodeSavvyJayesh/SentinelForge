@@ -1660,3 +1660,108 @@ a.button {
   margin-top: var(--space-2);
   white-space: pre-wrap;
 }
+
+/* ---------- Patch validation (Phase 11) ---------- */
+
+/* The verdict sits above the diff. Each state has its own colour, but the
+   words carry the meaning — "Checked by re-scan" and "Rejected by re-scan"
+   read correctly in greyscale. */
+.patch__verdict {
+  margin: 0 0 var(--space-3);
+  border-left: 2px solid var(--severity-medium);
+  background: rgba(250, 204, 21, 0.1);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.patch__verdict p {
+  margin: 0;
+}
+
+.patch__verdict--passed {
+  border-left-color: var(--color-ok);
+  background: var(--color-ok-bg);
+}
+
+.patch__verdict--rejected {
+  border-left-color: var(--color-fail);
+  background: var(--color-fail-bg);
+}
+
+.patch__verdict--pending {
+  border-left-color: var(--color-pending);
+  background: var(--color-surface-raised);
+}
+
+.patch__verdict .button {
+  margin-top: var(--space-2);
+}
+
+.patch__checks {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+  font-size: 0.75rem;
+}
+
+.patch__check {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 14rem) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.patch__check-outcome {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.patch__check--passed .patch__check-outcome {
+  color: var(--color-ok);
+}
+
+.patch__check--failed .patch__check-outcome {
+  color: var(--color-fail);
+}
+
+.patch__check--skipped .patch__check-outcome,
+.patch__check-detail {
+  color: var(--color-text-muted);
+}
+
+.patch__verdict .patch__verdict-note {
+  margin-top: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .patch__check {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* A diff line is a <code> element, and the global <code> style gives every one
+   of those a chip: border, radius, tinted background. Fine for an inline rule
+   id, wrong for forty stacked lines — it draws a box round each. */
+.patch__diff code {
+  border: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.patch__line--context,
+.patch__line--meta {
+  background: transparent;
+}
+
+.patch__steps {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+}

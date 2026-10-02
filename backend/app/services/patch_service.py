@@ -15,8 +15,9 @@ The generation is six steps, and the order is the design:
    in disguise, and still parses where the language allows.
 
 What this never does is write to the workspace. A patch is text with a status of
-``PROPOSED``, and only Phase 11 — applying it to a throwaway copy and re-scanning
-— can say anything stronger.
+``PROPOSED``. The moment one is stored, a validation is queued for it, and only
+that — applying the diff to a throwaway copy and re-scanning — can say anything
+stronger.
 """
 
 from datetime import UTC, datetime
@@ -43,6 +44,8 @@ from app.models import (
     FindingStatus,
     Patch,
     PatchStatus,
+    PatchValidation,
+    PatchValidationStatus,
     Repository,
     User,
 )
@@ -57,9 +60,11 @@ from app.services.knowledge_service import KnowledgeBaseNotBuiltError, Knowledge
 
 logger = get_logger("sentinelforge.patches")
 
-# Rules whose snippet is redacted before storage, so it cannot be compared
-# against the file to detect drift.
-REDACTED_RULE_PREFIX = "SEC"
+CREDENTIAL_MESSAGE = (
+    "A leaked credential cannot be fixed by editing the file: it is already in every copy "
+    "of the repository and in its history. Rotate it, remove it from the code, and load the "
+    "new one from the environment or a secret manager."
+)
 
 # Temperature for a retry. The first attempt runs at the configured default
 # (0), because a reproducible answer is worth having. But at 0 the model is
@@ -210,6 +215,7 @@ class PatchService:
             after = splice(region, replacement)
             diff = diffing.build(finding.file_path, region.file_lines, after)
             diffing.check(diff, replaced_lines=len(region.lines))
+            diffing.check_substance(finding.file_path, diff.added_lines)
             diffing.check_syntax(finding.file_path, after)
 
             patch.status = PatchStatus.PROPOSED
@@ -226,6 +232,17 @@ class PatchService:
             patch.rejected_code = None
             patch.error_message = None
             self._finish(patch, started)
+            # Every proposal is checked, without anybody having to ask: there is
+            # no window in which a diff is on screen and nothing has tried to
+            # test it. The check itself runs in the validation worker.
+            self.db.add(
+                PatchValidation(
+                    patch_id=patch.id,
+                    requested_by_id=patch.requested_by_id,
+                    status=PatchValidationStatus.QUEUED,
+                )
+            )
+            self.db.flush()
 
             self._record(
                 AuditAction.PATCH_PROPOSED,
@@ -284,12 +301,10 @@ class PatchService:
         against lines that have shifted — it would apply cleanly and change the
         wrong code, which is the worst outcome available here.
 
-        Secret findings are exempt because their snippet is redacted before
-        storage, so there is nothing to compare. Their line is still checked to
-        be inside the file by ``read_region``.
+        Credential findings never reach this check — their snippet is redacted
+        and cannot be compared, which was once handled by exempting them here.
+        They are now refused outright in ``_assert_patchable``.
         """
-        if finding.rule_id.startswith(REDACTED_RULE_PREFIX):
-            return
         snippet = (finding.snippet or "").strip()
         if not snippet:
             return
@@ -319,6 +334,18 @@ class PatchService:
             raise FindingNotPatchableError(
                 "This finding is already fixed, so there is nothing to change."
             )
+        if finding.is_credential:
+            # Three reasons, any one of which would be enough.
+            #
+            # The fix is not a code change: the secret has leaked, and editing
+            # the line does not un-leak it. A diff has to quote the line it
+            # replaces, so proposing one stores the secret in this database and
+            # shows it on screen — the exact thing Phase 5 redacts it to
+            # prevent. And a model asked to "fix" a hard-coded secret invents a
+            # hard-coded default, which a re-scan then waves through.
+            #
+            # All three were observed on the first real proposal for one.
+            raise FindingNotPatchableError(CREDENTIAL_MESSAGE)
 
     def _finish(self, patch: Patch, started: datetime) -> None:
         patch.finished_at = datetime.now(UTC)
