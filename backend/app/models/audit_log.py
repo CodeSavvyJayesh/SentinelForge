@@ -48,6 +48,10 @@ class AuditAction(StrEnum):
     PATCH_REQUESTED = "patch.requested"
     PATCH_PROPOSED = "patch.proposed"
     PATCH_FAILED = "patch.failed"
+    PATCH_VALIDATION_REQUESTED = "patch.validation_requested"
+    PATCH_VALIDATION_PASSED = "patch.validation_passed"
+    PATCH_VALIDATION_REJECTED = "patch.validation_rejected"
+    PATCH_VALIDATION_FAILED = "patch.validation_failed"
 
 
 class AuditLog(Base):

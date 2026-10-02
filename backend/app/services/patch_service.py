@@ -15,8 +15,9 @@ The generation is six steps, and the order is the design:
    in disguise, and still parses where the language allows.
 
 What this never does is write to the workspace. A patch is text with a status of
-``PROPOSED``, and only Phase 11 — applying it to a throwaway copy and re-scanning
-— can say anything stronger.
+``PROPOSED``. The moment one is stored, a validation is queued for it, and only
+that — applying the diff to a throwaway copy and re-scanning — can say anything
+stronger.
 """
 
 from datetime import UTC, datetime
@@ -43,6 +44,8 @@ from app.models import (
     FindingStatus,
     Patch,
     PatchStatus,
+    PatchValidation,
+    PatchValidationStatus,
     Repository,
     User,
 )
@@ -210,6 +213,7 @@ class PatchService:
             after = splice(region, replacement)
             diff = diffing.build(finding.file_path, region.file_lines, after)
             diffing.check(diff, replaced_lines=len(region.lines))
+            diffing.check_substance(finding.file_path, diff.added_lines)
             diffing.check_syntax(finding.file_path, after)
 
             patch.status = PatchStatus.PROPOSED
@@ -226,6 +230,17 @@ class PatchService:
             patch.rejected_code = None
             patch.error_message = None
             self._finish(patch, started)
+            # Every proposal is checked, without anybody having to ask: there is
+            # no window in which a diff is on screen and nothing has tried to
+            # test it. The check itself runs in the validation worker.
+            self.db.add(
+                PatchValidation(
+                    patch_id=patch.id,
+                    requested_by_id=patch.requested_by_id,
+                    status=PatchValidationStatus.QUEUED,
+                )
+            )
+            self.db.flush()
 
             self._record(
                 AuditAction.PATCH_PROPOSED,

@@ -77,6 +77,12 @@ os.environ["PATCH_WORKER_ENABLED"] = "false"
 os.environ.setdefault("PATCH_POLL_INTERVAL_SECONDS", "0.05")
 os.environ.setdefault("PATCH_STALE_AFTER_SECONDS", "300")
 os.environ.setdefault("PATCH_MAX_ATTEMPTS", "2")
+
+# Validation (Phase 11). Nothing starts itself here either; tests drive the
+# worker through the `validation_worker` fixture.
+os.environ["VALIDATION_WORKER_ENABLED"] = "false"
+os.environ.setdefault("VALIDATION_POLL_INTERVAL_SECONDS", "0.05")
+os.environ.setdefault("VALIDATION_MAX_ATTEMPTS", "2")
 os.environ.setdefault("SCAN_POLL_INTERVAL_SECONDS", "0.05")
 os.environ.setdefault("SCAN_STALE_AFTER_SECONDS", "60")
 os.environ["LOG_FORMAT"] = "text"
@@ -162,6 +168,22 @@ def patch_worker(db_session: Session, stub_embedder, fake_llm):  # noqa: ANN001,
     return PatchWorker(
         get_settings(), session_factory=session_factory, embedder=stub_embedder, llm=fake_llm
     )
+
+
+@pytest.fixture
+def validation_worker(db_session: Session):  # noqa: ANN201
+    """A validation worker sharing the test transaction, driven tick by tick.
+
+    No fakes are injected because there is nothing to fake: it uses the real
+    analyser on a real copy of a real workspace.
+    """
+    from app.core.config import get_settings
+    from app.workers.validation_worker import ValidationWorker
+
+    def session_factory() -> Session:
+        return Session(bind=db_session.connection(), join_transaction_mode="create_savepoint")
+
+    return ValidationWorker(get_settings(), session_factory=session_factory)
 
 
 @pytest.fixture

@@ -289,10 +289,11 @@ def test_a_proposal_is_never_reported_as_validated(
     patch_worker,
     workspace_root: Path,
 ) -> None:
-    """Nothing in this phase can say a patch works.
+    """Generating a patch says nothing about whether it works.
 
-    `validated` is False on a successful proposal, and the status vocabulary
-    has no APPLIED in it. Phase 11 earns those by re-scanning a copy.
+    `validated` is False on a fresh proposal — its validation is queued, not
+    run — and the status vocabulary has no APPLIED in it. The word is earned
+    only by the re-scan of a copy, which `test_patch_validation.py` covers.
     """
     build_knowledge(db_session, stub_embedder)
     fake_llm.response = patch_response()
@@ -876,3 +877,29 @@ def test_a_well_formed_fix_is_not_reported_as_reindented(
 
     assert body["status"] == PatchStatus.PROPOSED
     assert body["reindented"] is False
+
+
+def test_a_model_that_swaps_the_code_for_a_no_op_is_refused(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """The tidy deletion: one line out, ``pass`` in.
+
+    The size check passes it — net change zero — and the finding would be gone
+    on a re-scan. It is refused before anybody is shown it, and again by
+    validation in Phase 11 from the diff itself.
+    """
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(replacement="    pass", rationale="Removed the hash.")
+    token = sign_up(api_client, "noop")
+    finding = make_finding(api_client, db_session, token, workspace_root)
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.FAILED
+    assert "nothing that runs" in body["error_message"]
+    assert body["diff"] is None

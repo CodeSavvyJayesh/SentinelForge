@@ -46,6 +46,10 @@ class Diff:
     text: str
     added: int
     removed: int
+    # The added lines themselves, without their "+" or their line ending. Kept
+    # so the substance check below reads what was added rather than re-parsing
+    # the text and guessing which "+" lines are code.
+    added_lines: tuple[str, ...] = ()
 
 
 def build(file_path: str, before: list[str], after: list[str], *, context: int = 3) -> Diff:
@@ -60,9 +64,13 @@ def build(file_path: str, before: list[str], after: list[str], *, context: int =
         )
     )
     text = "".join(line if line.endswith("\n") else line + "\n" for line in lines)
-    added = sum(1 for line in lines if line.startswith("+") and not line.startswith("+++"))
-    removed = sum(1 for line in lines if line.startswith("-") and not line.startswith("---"))
-    return Diff(text=text, added=added, removed=removed)
+    # The first two lines are the file headers and are skipped by position, not
+    # by prefix: an added `++i;` is the line `+++i;`, and a removed SQL comment
+    # `-- x` is `--- x`. Telling those from headers by how they start miscounts.
+    body = lines[2:]
+    added_lines = tuple(line[1:].rstrip("\r\n") for line in body if line.startswith("+"))
+    removed = sum(1 for line in body if line.startswith("-"))
+    return Diff(text=text, added=len(added_lines), removed=removed, added_lines=added_lines)
 
 
 def check(diff: Diff, *, replaced_lines: int) -> None:
@@ -82,6 +90,56 @@ def check(diff: Diff, *, replaced_lines: int) -> None:
         raise PatchRejected(
             "The proposed change mostly deletes code. Removing the vulnerable lines makes the "
             "finding disappear without fixing anything, so it is not being shown."
+        )
+
+
+# Comment openers by language family. Deliberately per-suffix: `#` starts a
+# comment in Python and a preprocessor directive in C, and `*p = 0;` is code.
+HASH_COMMENT_SUFFIXES = frozenset(
+    {".py", ".pyi", ".rb", ".sh", ".bash", ".yml", ".yaml", ".toml", ".tf", ".pl", ".r", ".ps1",
+     ".properties", ".env", ".cfg", ".ini", ".conf", ".php"}
+)  # fmt: skip
+SLASH_COMMENT_SUFFIXES = frozenset(
+    {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".java", ".c", ".h", ".cpp", ".cc", ".hpp",
+     ".cs", ".go", ".php", ".kt", ".swift", ".rs", ".scala"}
+)  # fmt: skip
+DASH_COMMENT_SUFFIXES = frozenset({".sql", ".lua", ".hs"})
+NO_OP_STATEMENTS = frozenset({"pass", "...", ";", "{}", "{", "}", "pass;"})
+
+
+def is_inert(line: str, file_path: str) -> bool:
+    """Whether a line does nothing: blank, a comment, or a bare no-op."""
+    stripped = line.strip()
+    if not stripped or stripped in NO_OP_STATEMENTS:
+        return True
+    suffix = PurePosixPath(file_path).suffix.lower()
+    if suffix in HASH_COMMENT_SUFFIXES and stripped.startswith("#"):
+        return True
+    if suffix in SLASH_COMMENT_SUFFIXES and (
+        stripped.startswith(("//", "/*", "*/")) or stripped == "*" or stripped.startswith("* ")
+    ):
+        return True
+    return suffix in DASH_COMMENT_SUFFIXES and stripped.startswith("--")
+
+
+def check_substance(file_path: str, added_lines: tuple[str, ...] | list[str]) -> None:
+    """Refuse a change that replaces code with nothing that runs.
+
+    The size check above catches a model deleting twelve lines. It does not
+    catch the tidier version of the same move: swapping the one vulnerable line
+    for ``pass`` or for ``# removed for security``. One line out, one line in,
+    net zero — and the finding is gone, so a re-scan would call it fixed.
+
+    This is a heuristic and is stated as one. It recognises blank lines,
+    comments and bare no-ops; it does not recognise ``return None`` in place of
+    a function body. What it buys is that the cheapest way to make a finding
+    disappear is no longer available.
+    """
+    if all(is_inert(line, file_path) for line in added_lines):
+        raise PatchRejected(
+            "The proposed change replaces the vulnerable code with nothing that runs "
+            "(only blank lines, comments or a no-op). That hides the finding instead of "
+            "fixing it, so it is not being shown."
         )
 
 
@@ -116,5 +174,7 @@ __all__ = [
     "PatchRejected",
     "build",
     "check",
+    "check_substance",
     "check_syntax",
+    "is_inert",
 ]

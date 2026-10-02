@@ -152,11 +152,11 @@ belongs next to it.
 It is also the only failure data this project will ever have. Nobody can
 reconstruct, after the fact, what a model returned six weeks ago.
 
-## What Phase 11 has to add
+## What happens next
 
-- apply the patch to a **copy**, never the workspace;
-- re-scan the copy, and compare findings before and after;
-- treat "the finding disappeared" as necessary but not sufficient — the deletion
-  check above is the reason;
-- record the verdict where the UI can show it, and only then let anything say a
-  patch was validated.
+Every proposal is validated automatically: applied to a throwaway copy and
+scanned again. That is Phase 11, and it has its own page —
+[validating a fix](validation.md) — including the ways a finding can disappear
+without anything having been fixed, and the one-for-one "replace it with `pass`"
+deletion that the size check above cannot see and a second check now refuses
+both here and there.

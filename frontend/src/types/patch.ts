@@ -5,12 +5,68 @@ export type PatchStatus = 'QUEUED' | 'RUNNING' | 'PROPOSED' | 'FAILED'
 /** Still working — the UI polls while one of these is true. */
 export const ACTIVE_PATCH_STATUSES: PatchStatus[] = ['QUEUED', 'RUNNING']
 
+export type ValidationStatus = 'QUEUED' | 'RUNNING' | 'PASSED' | 'REJECTED' | 'FAILED'
+
+export const ACTIVE_VALIDATION_STATUSES: ValidationStatus[] = ['QUEUED', 'RUNNING']
+
+/** "skipped" is a real answer: it means this was not checked, not that it was fine. */
+export type CheckOutcome = 'passed' | 'failed' | 'skipped'
+
+/** One thing the re-scan tested, and how it came out. */
+export interface ValidationCheck {
+  key: string
+  outcome: CheckOutcome
+  detail: string
+}
+
+/** Something the patched copy has that the original code did not. */
+export interface NewFinding {
+  rule_id: string
+  title: string
+  severity: string
+  file_path: string
+  line: number
+}
+
+/**
+ * One attempt to check a proposed change by applying it to a throwaway copy
+ * and scanning again.
+ *
+ * PASSED and REJECTED are verdicts. FAILED is not one — it means the check
+ * could not be made (the stored code moved, say) and says nothing about the
+ * change itself.
+ */
+export interface PatchValidation {
+  id: number
+  status: ValidationStatus
+  attempts: number
+  checks: ValidationCheck[]
+  findings_before: number | null
+  findings_after: number | null
+  /** Other findings the change happened to remove. Reported, not rewarded. */
+  also_resolved: number
+  new_findings: NewFinding[]
+  duration_ms: number | null
+  error_message: string | null
+  created_at: string
+  finished_at: string | null
+}
+
+/** What each check is called on screen. Unknown keys fall back to the key. */
+export const CHECK_LABELS: Record<string, string> = {
+  target_resolved: 'The finding is no longer detected',
+  no_new_findings: 'Nothing new is detected',
+  not_a_deletion: 'The code was replaced, not removed',
+  still_parses: 'The file still parses',
+}
+
 /**
  * A proposed change to the code a finding points at.
  *
- * Note what is absent: there is no 'APPLIED', and `validated` is always false
- * in this phase. Nothing here has been run, tested, or re-scanned — the type
- * is deliberately unable to claim otherwise.
+ * There is no 'APPLIED'. A patch is a proposal, and `validated` says only that
+ * its most recent re-scan passed: the finding is no longer detected, nothing
+ * new is, and the change is not a deletion. It does not say the program still
+ * behaves the same, and it does not mean anything on disk changed.
  */
 export interface Patch {
   id: number
@@ -27,8 +83,10 @@ export interface Patch {
   lines_added: number
   lines_removed: number
 
-  /** Always false until Phase 11 applies a patch to a copy and re-scans it. */
+  /** True only while the latest re-scan of a throwaway copy passed every check. */
   validated: boolean
+  /** The latest validation, whatever state it is in. Null if never checked. */
+  validation: PatchValidation | null
 
   model: string | null
   prompt_version: number | null
@@ -89,4 +147,29 @@ function classify(line: string): DiffLineKind {
   if (line.startsWith('+')) return 'added'
   if (line.startsWith('-')) return 'removed'
   return 'context'
+}
+
+/**
+ * Where a proposal stands, as one word the panel can switch on.
+ *
+ * 'undetermined' is deliberately separate from 'rejected'. A check that could
+ * not run has not found anything wrong with the change, and the panel must not
+ * say that it did.
+ */
+export type ValidationState = 'unchecked' | 'checking' | 'validated' | 'rejected' | 'undetermined'
+
+export function validationState(patch: Patch): ValidationState {
+  const validation = patch.validation
+  if (validation === null) return 'unchecked'
+  if (ACTIVE_VALIDATION_STATUSES.includes(validation.status)) return 'checking'
+  if (validation.status === 'REJECTED') return 'rejected'
+  if (validation.status === 'FAILED') return 'undetermined'
+  // PASSED alone is not enough: the server's own verdict has to agree. If the
+  // two ever disagree, the cautious reading wins.
+  return patch.validated ? 'validated' : 'undetermined'
+}
+
+/** True while something is still in flight and the panel should keep polling. */
+export function isSettling(patch: Patch): boolean {
+  return ACTIVE_PATCH_STATUSES.includes(patch.status) || validationState(patch) === 'checking'
 }

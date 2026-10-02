@@ -160,3 +160,79 @@ def test_the_syntax_check_does_not_execute_the_code(tmp_path) -> None:  # noqa: 
     diffing.check_syntax("x.py", source)
 
     assert not marker.exists()
+
+
+# --- substance --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "path"),
+    [
+        ("", "a.py"),
+        ("    pass", "a.py"),
+        ("    # removed for security", "a.py"),
+        ("    ...", "a.py"),
+        ("        // removed", "Report.java"),
+        ("        /* removed */", "Report.java"),
+        ("         * still inside the comment", "Report.java"),
+        ("        ;", "Report.java"),
+        ("-- removed", "q.sql"),
+    ],
+)
+def test_lines_that_do_nothing_are_recognised(line: str, path: str) -> None:
+    assert diffing.is_inert(line, path)
+
+
+@pytest.mark.parametrize(
+    ("line", "path"),
+    [
+        ("    return hashlib.sha256(value).hexdigest()", "a.py"),
+        # `#` is a comment in Python and a directive in C.
+        ("#include <openssl/sha.h>", "a.c"),
+        # A dereference, not the middle of a block comment.
+        ("*p = 0;", "a.c"),
+        # `//` and `*` open nothing in Python. On a continuation line they are
+        # floor division and multiplication — code, at the start of a line.
+        ("         // divisor)", "a.py"),
+        ("         * rate)", "a.py"),
+        ("    return null;", "Report.java"),
+    ],
+)
+def test_lines_that_do_something_are_not_mistaken_for_comments(line: str, path: str) -> None:
+    assert not diffing.is_inert(line, path)
+
+
+def test_replacing_code_with_a_no_op_is_refused() -> None:
+    """One line out, one line in — the size check sees a net change of zero.
+
+    This is the tidy version of deleting the vulnerable code, and it would
+    otherwise reach a reviewer as a one-line "fix".
+    """
+    with pytest.raises(diffing.PatchRejected, match="nothing that runs"):
+        diffing.check_substance("a.py", ("    pass",))
+
+    with pytest.raises(diffing.PatchRejected, match="nothing that runs"):
+        diffing.check_substance("a.py", ("    # removed: insecure", ""))
+
+
+def test_a_change_with_any_real_code_in_it_is_not_refused() -> None:
+    diffing.check_substance("a.py", ("    # use a strong hash", "    return sha256(v)"))
+
+
+def test_the_diff_carries_its_added_lines() -> None:
+    after = ["def digest(value):\n", "    return hashlib.sha256(value).hexdigest()\n"]
+
+    diff = diffing.build("a.py", BEFORE, after)
+
+    assert diff.added_lines == ("    return hashlib.sha256(value).hexdigest()",)
+
+
+def test_lines_that_look_like_file_markers_are_still_counted() -> None:
+    """An added ``++i;`` is the diff line ``+++i;``, and a removed SQL comment
+    ``-- x`` is ``--- x``. Recognising headers by prefix drops both from the
+    count; the headers are the first two lines and are skipped by position."""
+    diff = diffing.build("a.c", ["int i = 0;\n", "-- x\n"], ["int i = 0;\n", "++i;\n"])
+
+    assert diff.added == 1
+    assert diff.removed == 1
+    assert diff.added_lines == ("++i;",)

@@ -211,6 +211,23 @@ def _analyze_file(text: str, relative: str, suffix: str, result: AnalysisResult)
     return findings
 
 
+def analysable_files(root: Path, settings: Settings) -> list[Path]:
+    """The files an analysis of ``root`` would actually read, in order.
+
+    Public because patch validation copies exactly this set into its throwaway
+    workspace: anything the analyser would never open cannot change a verdict,
+    and copying a 400 MB dependency folder to check a one-line fix is waste.
+    """
+    files: list[Path] = []
+    for path in _source_files(root):
+        try:
+            if path.stat().st_size <= settings.ANALYSIS_MAX_FILE_BYTES:
+                files.append(path)
+        except OSError:
+            continue
+    return files
+
+
 def _source_files(root: Path) -> list[Path]:
     """Every candidate file, in a stable order."""
     import os

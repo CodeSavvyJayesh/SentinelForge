@@ -27,12 +27,13 @@ from app.workers.explanation_worker import ExplanationWorker
 from app.workers.job_worker import JobWorker
 from app.workers.patch_worker import PatchWorker
 from app.workers.scan_worker import ScanWorker
+from app.workers.validation_worker import ValidationWorker
 
 logger = get_logger("sentinelforge.app")
 
 
 def _start(worker_class: type[JobWorker], cfg: Settings, *, enabled: bool) -> JobWorker | None:
-    """Build and start a model-backed worker, or survive not being able to."""
+    """Build and start a background worker, or survive not being able to."""
     if not enabled:
         return None
     try:
@@ -85,14 +86,18 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
         # would turn an optional feature into a hard dependency.
         explainer = _start(ExplanationWorker, cfg, enabled=cfg.EXPLANATION_WORKER_ENABLED)
         patcher = _start(PatchWorker, cfg, enabled=cfg.PATCH_WORKER_ENABLED)
+        # No model behind this one: validating a patch is the analyser run
+        # twice on a throwaway copy.
+        validator = _start(ValidationWorker, cfg, enabled=cfg.VALIDATION_WORKER_ENABLED)
 
         application.state.scan_worker = worker
         application.state.explanation_worker = explainer
         application.state.patch_worker = patcher
+        application.state.validation_worker = validator
         try:
             yield
         finally:
-            for background in (patcher, explainer):
+            for background in (validator, patcher, explainer):
                 if background is not None:
                     background.stop()
             if worker is not None:

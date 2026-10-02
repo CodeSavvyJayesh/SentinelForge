@@ -12,11 +12,21 @@ export const PATCHES_PATH = '/api/v1/patches'
  */
 export const PATCH_POLL_INTERVAL_MS = 3_000
 
+/** How often to ask while a re-scan is running.
+ *
+ * Much faster than the generation poll: a validation is the analyser run
+ * twice, which takes milliseconds. Waiting three seconds to show a verdict
+ * that was ready after one would make the check feel like an afterthought.
+ */
+export const VALIDATION_POLL_INTERVAL_MS = 1_000
+
 export interface PatchService {
   request(findingId: number): Promise<Patch>
   get(patchId: number, signal?: AbortSignal): Promise<Patch>
   /** The latest attempt, or null when one has never been requested. */
   latestForFinding(findingId: number, signal?: AbortSignal): Promise<Patch | null>
+  /** Queue a re-scan of a proposal. Returns the patch with the queued check. */
+  requestValidation(patchId: number): Promise<Patch>
 }
 
 export function createPatchService(client: ApiClient): PatchService {
@@ -48,6 +58,16 @@ export function createPatchService(client: ApiClient): PatchService {
       // 204 means nobody has ever asked. That is different from "asked and was
       // refused", and the panel says something different for each.
       return result.status === 204 ? null : result.data
+    },
+
+    async requestValidation(patchId) {
+      const result = await client.request<Patch>(`${PATCHES_PATH}/${patchId}/validation`, {
+        method: 'POST',
+        auth: true,
+        // 202 Accepted: queued, not checked. The verdict arrives by polling.
+        acceptStatuses: [202],
+      })
+      return result.data
     },
   }
 }

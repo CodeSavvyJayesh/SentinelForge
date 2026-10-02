@@ -166,5 +166,5 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Local LLM explanation of findings, grounded in the knowledge base | Implemented (Phase 8) — see [security/llm.md](../security/llm.md) |
 | Deterministic risk scoring with per-factor explanations | Implemented (Phase 9) |
 | Patch generation: proposed fixes as reviewable diffs, never applied | Implemented (Phase 10) — see [security/patching.md](../security/patching.md) |
-| Patch validation (apply to a copy, re-scan, compare) | Phase 11 |
+| Patch validation: every proposal applied to a throwaway copy and re-scanned | Implemented (Phase 11) — see [security/validation.md](../security/validation.md) |
 | Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |
