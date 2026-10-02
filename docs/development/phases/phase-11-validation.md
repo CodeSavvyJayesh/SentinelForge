@@ -136,7 +136,7 @@ not test it" is counted as "it failed".
   still at its severity, and the risk score has not moved. The real code has not
   changed — only a copy did, and the copy is gone.
 
-## Mutation testing: 46 controls, 46 killed
+## Mutation testing: 52 controls, 52 killed
 
 Three survived the first run:
 
@@ -182,6 +182,61 @@ thing to try on the development machine.
 The browser run also showed that every line of a diff had a box drawn round it
 (the global `<code>` style applied to each line). Fixed.
 
+## What the first real proposal found
+
+Everything above was checked without a language model, because there is none in
+the build environment. The first proposal from the real one, on the development
+machine, was for a hard-coded JWT secret in a `.env` file:
+
+```diff
+-JWT_SECRET=s3cr3t_value_42
++JWT_SECRET=${JWT_SECRET:-'default_secret'}
+```
+
+It came back **"Checked by re-scan"**, all checks passed. Every part of the
+machinery worked, and the verdict was wrong. Two things were visible in one
+screenshot:
+
+**The fix was not a fix.** It replaced one hard-coded secret with another. The
+secret rule dismissed any value beginning with `${` as a reference to a
+variable, so the finding vanished and nothing new appeared. This is the
+limitation written down above — a re-scan is only as good as its rules —
+arriving on the first try, with the model finding the blind spot unprompted.
+
+**The diff printed the secret.** A finding for a credential is stored with the
+value redacted, and has been since Phase 5, because a findings table full of
+secrets is a breach waiting for a backup. A diff has to quote the line it
+replaces. So `patches.diff` held the credential in plain text and the interface
+displayed it. That hole was opened in Phase 10 and nobody — including the tests
+I wrote for it — had pointed the feature at a secret.
+
+Both have the same root, and it is not a missing check. **A leaked credential is
+not something a code change can fix.** It is in every clone and in the history;
+editing the line does not un-leak it. Asking a model for a patch was the wrong
+question, and it answered the wrong question as well as it could.
+
+So:
+
+- **No change is proposed for a credential finding.** The request is refused
+  with what to do instead — rotate it, remove it, load it from the environment —
+  and the interface shows that advice in place of the button. A credential is
+  recognised by its weakness (CWE-798), not by a list of rule ids, and the API
+  reports it on the finding so the interface keeps no list of its own.
+- **Patches already stored for credentials are deleted** by a migration, with
+  their validations. Deleted rather than blanked: none of them was a fix, and a
+  row that says a proposal exists and shows nothing helps no one. The migration
+  has a test that the right rows go and the others stay.
+- **The rule is fixed anyway.** `NAME=${NAME:-literal}` is reported as a
+  hard-coded credential, with the fallback redacted. The model's exact output is
+  now a test in which validation rejects it — unreachable through the
+  application, kept because the verdict logic should be right on its own.
+
+This is the third phase running in which the decisive defect was found by
+running the thing on real input after a clean test run and a clean mutation
+pass. It is also the plainest example so far of why: the tests could not have
+caught it, because I wrote them, and I had not thought of pointing a patch
+generator at a secret either.
+
 ## What the development machine found
 
 `verify.ps1` on Windows failed five tests — all in `test_patch_region.py`, all
@@ -211,12 +266,12 @@ test reads back are written as bytes.
 | Check | Result |
 | --- | --- |
 | `ruff format` + `ruff check` | clean |
-| Backend tests | **766 passed** (94 new) |
-| The same suite under simulated Windows line endings | **766 passed** |
+| Backend tests | **783 passed** (111 new) |
+| The same suite under simulated Windows line endings | **783 passed** |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | clean; no drift |
-| Mutation pass | **46/46 controls killed** |
+| Mutation pass | **52/52 controls killed** |
 | Live API + worker run | 4 verdicts as expected, workspace untouched |
-| Browser run | 16/16 |
+| Browser run | 19/19 |
 | `tsc` | clean |
 | Frontend tests | **96 passed** (13 new) |
 
@@ -228,6 +283,10 @@ test reads back are written as bytes.
 - "Nothing that runs" recognises blank lines, comments and bare no-ops — not
   `return None` where a function body used to be.
 - A file that is not UTF-8 cannot be validated at all.
+- Credentials get advice, not a patch. Other findings a code edit cannot truly fix
+  may exist; this is the one that was found.
+- Hard-coded fallbacks are detected in shell-style lines only. The Python
+  equivalent, `os.environ.get("KEY", "literal")`, is not.
 
 ## What this unlocks
 

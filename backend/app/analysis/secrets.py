@@ -105,6 +105,15 @@ ENV_ASSIGNMENT = re.compile(
     rf"(?i)^\s*(?:export\s+)?({SECRET_NAME_PATTERN})\s*=\s*([^\s#\"']{{{MIN_SECRET_LENGTH},120}})\s*$"
 )
 
+# NAME=${NAME:-fallback} — a reference with a literal default. It reads like
+# "taken from the environment" and is a hard-coded credential whenever the
+# variable is unset, which in a committed .env file is the normal case. The
+# fallback is group 2.
+SHELL_DEFAULT_ASSIGNMENT = re.compile(
+    rf"(?i)^\s*(?:export\s+)?({SECRET_NAME_PATTERN})\s*=\s*[\"']?"
+    rf"\$\{{\w+:?[-=]\s*[\"']?([^\"'}}\s]{{{MIN_SECRET_LENGTH},120}})[\"']?\s*\}}[\"']?\s*$"
+)
+
 # Files whose whole content is `NAME=value` configuration.
 ENV_STYLE_SUFFIXES = frozenset({".env", ".ini", ".cfg", ".conf", ".properties", ".sh"})
 ENV_STYLE_NAMES = frozenset({".env", ".flaskenv"})
@@ -152,7 +161,14 @@ def _scan(source: str, file_path: str) -> Iterator[Finding]:
         if raw_line.lstrip().startswith("#"):
             continue  # a commented-out line is documentation, not a live secret
 
-        generic = GENERIC_ASSIGNMENT.search(raw_line)
+        # Checked first: `${NAME:-fallback}` would otherwise be read as a
+        # reference to a variable and dismissed, which it only half is. Not
+        # limited to .env-style files: the pattern is a whole line of shell
+        # syntax, so it is as much a credential in a Makefile or an
+        # extensionless entrypoint script as it is in a .env.
+        generic = SHELL_DEFAULT_ASSIGNMENT.match(raw_line)
+        if generic is None:
+            generic = GENERIC_ASSIGNMENT.search(raw_line)
         if generic is None and env_style:
             generic = ENV_ASSIGNMENT.match(raw_line)
         if generic:

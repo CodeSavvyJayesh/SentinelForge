@@ -187,8 +187,10 @@ SentinelForge/
   program still behaves the same — the project's own tests are never run, because they are
   code somebody uploaded.
 - A re-scan is only as good as the rules it re-runs. A change that rewrites a weakness into a
-  form no rule recognises would pass validation. One such gap (SQL built with `.format()` on a
-  literal) was found and closed while building this phase; others certainly remain.
+  form no rule recognises would pass validation. Two such gaps were found and closed while building this phase — SQL built with `.format()`
+  on a literal, and a secret hidden behind a shell default — and others certainly remain.
+- No fix is proposed for a hard-coded credential. It has to be rotated; editing the line does
+  not un-leak it, and a diff would have to print it.
 - The patched file is parsed only for Python. For other languages a syntactically broken
   change is not caught by a parser, and the check is reported as *not checked* rather than
   passed.

@@ -304,6 +304,10 @@ again — and the result is returned inside the patch:
 Poll `GET /api/v1/patches/{id}` while `validation.status` is `QUEUED` or
 `RUNNING`; a check takes milliseconds, so a one-second interval is enough.
 
+Findings carry `is_credential`. When it is true, `POST …/patch` answers **409
+`FINDING_NOT_PATCHABLE`** with what to do instead: a leaked credential is
+rotated, not edited, and a diff for one would have to quote the secret.
+
 A `FAILED` patch carries the reason in `error_message`, and the reasons are
 written for the developer: *"the model returned the same code"*, *"the proposed
 change mostly deletes code"*, *"the code has changed since this finding was

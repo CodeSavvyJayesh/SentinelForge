@@ -38,7 +38,49 @@ type State =
  * the program still behaves the same, and the panel says that too. A check
  * that could not run is shown as exactly that, never as a rejection.
  */
-export function FindingPatch({ findingId }: { findingId: number }) {
+export function FindingPatch({
+  findingId,
+  credential = false,
+}: {
+  findingId: number
+  credential?: boolean
+}) {
+  // A leaked credential is not something an edit can fix, and a diff for one
+  // would have to print the secret. There is no button for it — the advice is
+  // the whole panel.
+  if (credential) return <RotateInstead />
+  return <ProposedChange findingId={findingId} />
+}
+
+/**
+ * What to do about a secret in the code, instead of a proposed change.
+ *
+ * The first real proposal for a credential quoted the secret in its diff and
+ * "fixed" it with a different hard-coded secret. Both problems come from asking
+ * for a code change at all, so the panel no longer offers one.
+ */
+function RotateInstead() {
+  return (
+    <section className="patch" aria-label="What to do about this credential">
+      <div className="patch__header">
+        <h4 className="patch__heading">No change is proposed for a credential</h4>
+      </div>
+      <div className="patch__verdict patch__verdict--caution" role="note">
+        <p>
+          <strong>Rotate it.</strong> A secret that has been committed is in every copy of the
+          repository and in its history, so editing this line does not make it safe again.
+        </p>
+        <ol className="patch__steps">
+          <li>Revoke or change the credential where it was issued.</li>
+          <li>Remove it from the code and load the new one from the environment or a secret manager.</li>
+          <li>Scan again — this finding closes when the code no longer contains it.</li>
+        </ol>
+      </div>
+    </section>
+  )
+}
+
+function ProposedChange({ findingId }: { findingId: number }) {
   const [state, setState] = useState<State>({ status: 'loading' })
   const [requesting, setRequesting] = useState(false)
   const [copied, setCopied] = useState(false)

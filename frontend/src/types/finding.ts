@@ -31,6 +31,12 @@ export interface Finding {
   first_seen_scan_id: number | null
   last_seen_scan_id: number | null
   fixed_in_scan_id: number | null
+  /**
+   * True for a hard-coded credential. No change is proposed for these: the fix
+   * is to rotate the secret, and a diff would have to quote it. Decided by the
+   * server, so the interface does not keep a rule list of its own.
+   */
+  is_credential: boolean
   created_at: string
 }
 

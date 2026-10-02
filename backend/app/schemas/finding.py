@@ -35,6 +35,9 @@ class FindingRead(BaseModel):
     first_seen_scan_id: int | None
     last_seen_scan_id: int | None
     fixed_in_scan_id: int | None
+    # True for a hard-coded credential. No change is proposed for these: the
+    # fix is to rotate the secret, and a diff would have to quote it.
+    is_credential: bool
     created_at: datetime
 
 

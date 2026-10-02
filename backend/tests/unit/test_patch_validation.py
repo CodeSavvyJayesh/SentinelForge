@@ -494,3 +494,30 @@ def test_files_too_large_to_analyse_are_not_copied(tmp_path: Path) -> None:
     names = [path.name for path in analysable_files(root, small_limit)]
 
     assert names == ["app.py"]
+
+
+def test_a_hardcoded_fallback_secret_is_not_a_fix_for_a_hardcoded_secret(tmp_path: Path) -> None:
+    """The first proposal a real model made for a credential, replayed.
+
+    `JWT_SECRET=s3cr3t_value_42` became `JWT_SECRET=${JWT_SECRET:-'default_secret'}`.
+    The value now began with `${`, the secret rule took it for a reference, the
+    finding vanished and the change was reported "Checked by re-scan" — with a
+    hard-coded secret still in the file. With the rule fixed, the re-scan sees
+    the fallback for what it is.
+
+    Changes are no longer proposed for credentials at all, so this cannot be
+    reached through the application. It is kept because the verdict logic
+    should be right on its own, not merely unreachable.
+    """
+    env = "MONGODB_URI=mongodb://localhost:27017/app\nPORT=3000\nJWT_SECRET=s3cr3t_value_42\n"
+    root = workspace(tmp_path, {".env": env})
+    diff = diff_for(
+        root, ".env", "JWT_SECRET=s3cr3t_value_42", "JWT_SECRET=${JWT_SECRET:-'default_secret'}"
+    )
+
+    outcome = run(root, ".env", diff, "SEC005")
+
+    assert not outcome.passed
+    assert outcome_of("no_new_findings", outcome) == FAILED
+    detail = next(check.detail for check in outcome.checks if check.key == "no_new_findings")
+    assert "reworded" in detail

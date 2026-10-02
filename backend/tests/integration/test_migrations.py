@@ -65,3 +65,70 @@ def test_timestamp_migration_preserves_existing_utc_values(database_available: N
             connection.exec_driver_sql(f'ALTER DATABASE "{database}" RESET timezone')
             connection.execute(text("DELETE FROM users WHERE email = 'legacy@example.com'"))
         alembic_upgrade("head")
+
+
+def test_patches_that_quote_credentials_are_removed_and_others_are_kept(
+    database_available: None,
+) -> None:
+    """A proposed change for a credential finding held the secret in plain
+    text. The migration deletes those rows, takes their validations with them,
+    and leaves every other patch alone."""
+    before, after = "e4b82c7d9a16", "f5c93d8eab27"
+    alembic_downgrade("base")
+    alembic_upgrade(before)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, email, username, hashed_password) "
+                    "VALUES (9001, 'm@example.com', 'migrator', 'x')"
+                )
+            )
+            connection.execute(
+                text("INSERT INTO projects (id, name, owner_id) VALUES (9001, 'm', 9001)")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO repositories (id, project_id, source, status, origin) "
+                    "VALUES (9001, 9001, 'UPLOAD', 'READY', 'x.zip')"
+                )
+            )
+            for finding_id, rule_id, cwe in (
+                (9001, "SEC005", "CWE-798"),
+                (9002, "PY007", "CWE-327"),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO findings (id, repository_id, rule_id, analyzer, title, "
+                        "message, severity, confidence, cwe_id, file_path, line_start, line_end, "
+                        "snippet, fingerprint) VALUES (:id, 9001, :rule, 'x', 't', 'm', 'HIGH', "
+                        "'HIGH', :cwe, 'f', 1, 1, 's', :fp)"
+                    ),
+                    {"id": finding_id, "rule": rule_id, "cwe": cwe, "fp": f"fp-{finding_id}"},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO patches (id, finding_id, status, diff) "
+                        "VALUES (:id, :id, 'PROPOSED', '-JWT_SECRET=the_actual_secret')"
+                    ),
+                    {"id": finding_id},
+                )
+                connection.execute(
+                    text("INSERT INTO patch_validations (patch_id, status) VALUES (:id, 'PASSED')"),
+                    {"id": finding_id},
+                )
+
+        alembic_upgrade(after)
+
+        with engine.connect() as connection:
+            patches = connection.execute(text("SELECT finding_id FROM patches")).scalars().all()
+            validations = (
+                connection.execute(text("SELECT patch_id FROM patch_validations")).scalars().all()
+            )
+            findings = connection.execute(text("SELECT count(*) FROM findings")).scalar_one()
+        assert patches == [9002], "only the credential's patch should be gone"
+        assert validations == [9002], "its validation goes with it"
+        assert findings == 2, "the findings themselves are untouched"
+    finally:
+        alembic_downgrade("base")
+        alembic_upgrade("head")
