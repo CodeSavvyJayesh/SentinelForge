@@ -111,7 +111,7 @@ def make_finding(
     relative = f"project-{project_id}/repo-patch"
     workspace = workspace_root / relative
     (workspace / "src").mkdir(parents=True, exist_ok=True)
-    (workspace / "src" / "hash.py").write_text(source, encoding="utf-8")
+    (workspace / "src" / "hash.py").write_bytes(source.encode("utf-8"))
 
     repository = Repository(
         project_id=project_id,

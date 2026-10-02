@@ -33,9 +33,18 @@ def other():
 
 
 def write(root: Path, name: str = "app.py", text: str = SOURCE) -> Path:
+    """Write a fixture file with exactly the line endings in ``text``.
+
+    Bytes, not text. ``Path.write_text`` translates ``\n`` to the platform's
+    line ending, so on Windows every fixture here silently became a CRLF file
+    and five tests asserting ``\n`` failed — while the code under test was
+    doing the right thing and preserving the CRLF it had been given. The tests
+    passed on Linux and had never been run on the machine the project is
+    developed on.
+    """
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_bytes(text.encode("utf-8"))
     return path
 
 

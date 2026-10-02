@@ -137,7 +137,7 @@ def test_the_copy_is_removed_even_when_validation_cannot_finish(tmp_path: Path) 
     root = workspace(tmp_path, {"app.py": PYTHON})
     diff = diff_for(root, "app.py", "hashlib.md5", "hashlib.sha256")
     target = fingerprint_of(root, "PY007")
-    (root / "app.py").write_text(PYTHON.replace("def digest(value):", "def digest(v):"))
+    (root / "app.py").write_bytes(PYTHON.replace("def digest(value):", "def digest(v):").encode())
     scratch = Path(tempfile.gettempdir())
     before = set(scratch.glob("sentinelforge-validate-*"))
 
@@ -328,7 +328,7 @@ def test_code_that_moved_after_the_proposal_cannot_be_validated(tmp_path: Path) 
     root = workspace(tmp_path, {"app.py": PYTHON})
     diff = diff_for(root, "app.py", "hashlib.md5", "hashlib.sha256")
     target = fingerprint_of(root, "PY007")
-    (root / "app.py").write_text(PYTHON.replace("def digest(value):", "def digest(v):"))
+    (root / "app.py").write_bytes(PYTHON.replace("def digest(value):", "def digest(v):").encode())
 
     with pytest.raises(CannotValidate, match="changed since"):
         validate(root, "app.py", diff, target, get_settings())
@@ -354,7 +354,7 @@ def test_a_diff_for_a_different_file_cannot_be_validated(tmp_path: Path) -> None
 
 def test_a_path_escaping_the_workspace_cannot_be_validated(tmp_path: Path) -> None:
     root = workspace(tmp_path, {"app.py": PYTHON})
-    (tmp_path / "secret.py").write_text(PYTHON, encoding="utf-8")
+    (tmp_path / "secret.py").write_bytes(PYTHON.encode())
     before = PYTHON.splitlines(keepends=True)
     after = PYTHON.replace("md5", "sha256").splitlines(keepends=True)
     diff = diffing.build("../secret.py", before, after).text
@@ -421,7 +421,7 @@ def test_files_the_analyser_never_reads_are_not_copied(tmp_path: Path, monkeypat
 def test_a_symlink_in_the_workspace_is_not_followed(tmp_path: Path) -> None:
     root = workspace(tmp_path, {"app.py": PYTHON})
     outside = tmp_path / "outside.py"
-    outside.write_text(PYTHON, encoding="utf-8")
+    outside.write_bytes(PYTHON.encode())
     try:
         (root / "link.py").symlink_to(outside)
     except (OSError, NotImplementedError):  # pragma: no cover - Windows without privilege

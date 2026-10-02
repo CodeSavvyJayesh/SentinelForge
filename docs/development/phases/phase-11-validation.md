@@ -182,12 +182,37 @@ thing to try on the development machine.
 The browser run also showed that every line of a diff had a box drawn round it
 (the global `<code>` style applied to each line). Fixed.
 
+## What the development machine found
+
+`verify.ps1` on Windows failed five tests — all in `test_patch_region.py`, all
+from Phase 10, none from this phase.
+
+The code was right and the fixtures were wrong. The helper that writes a test
+file used `Path.write_text`, which translates `\n` to the platform's line
+ending. On Windows every fixture became a CRLF file; `read_region` and `splice`
+correctly preserved the CRLF they were given; and five assertions written with
+`\n` failed. The failure output is, read properly, a demonstration that the
+Phase 10 line-ending fix works.
+
+Phase 10's fixes were never put through `verify.ps1` on Windows — the
+application was tried by hand instead — so this sat unnoticed for a phase. It is
+the second time a test has passed on Linux and failed on the machine the project
+is developed on (Phase 8's refused-connection test was the first), and "run it
+on Windows" is not something the build environment can do.
+
+So it now does the next best thing. The suite is run a second time with text-mode
+writes patched to behave as they do on Windows. Under that simulation the five
+failures reproduce exactly before the fix and are gone after it, and the whole
+suite — 766 tests — passes both ways. Fixtures whose line endings the code under
+test reads back are written as bytes.
+
 ## Verification
 
 | Check | Result |
 | --- | --- |
 | `ruff format` + `ruff check` | clean |
 | Backend tests | **766 passed** (94 new) |
+| The same suite under simulated Windows line endings | **766 passed** |
 | `alembic upgrade` → `check` → `downgrade` → `upgrade` | clean; no drift |
 | Mutation pass | **46/46 controls killed** |
 | Live API + worker run | 4 verdicts as expected, workspace untouched |
