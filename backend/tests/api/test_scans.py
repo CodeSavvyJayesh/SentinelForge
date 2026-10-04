@@ -441,6 +441,30 @@ def workspace_root_of(db_session: Session, repository_id: int):
     return WorkspaceManager(get_settings()).absolute(row.workspace_path)
 
 
+def test_the_api_says_when_a_repository_was_last_scanned(
+    api_client: TestClient, scan_worker, db_session: Session
+) -> None:
+    """The stored value was always right; the response left it out. The page
+    reads it to decide whether there are findings to load, so a scanned
+    repository went back to "not scanned yet" on every reload."""
+    token = sign_up(api_client, "alicereload")
+    repository_id = ingest(api_client, token, VULNERABLE)
+    project_id = db_session.get(Repository, repository_id).project_id
+
+    def listed() -> dict:
+        items = api_client.get(
+            f"/api/v1/projects/{project_id}/repositories", headers=auth(token)
+        ).json()["items"]
+        return next(item for item in items if item["id"] == repository_id)
+
+    assert listed()["analyzed_at"] is None
+
+    queue_scan(api_client, token, repository_id)
+    scan_worker.tick()
+
+    assert listed()["analyzed_at"] is not None
+
+
 def test_the_repository_records_when_it_was_last_scanned(
     api_client: TestClient, scan_worker, db_session: Session
 ) -> None:

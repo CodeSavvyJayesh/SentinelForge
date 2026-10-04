@@ -48,6 +48,10 @@ class RepositoryRead(BaseModel):
     language_breakdown: dict[str, int] | None
     error_message: str | None
     ingested_at: datetime | None
+    # When the last scan ran, or null if none has. The interface decides from
+    # this whether to load findings at all, so leaving it out made every
+    # repository look unscanned again each time the page was reopened.
+    analyzed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
