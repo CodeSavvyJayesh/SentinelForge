@@ -121,6 +121,18 @@ every absolute path. It was removed, and the comment now says what covers it.
 The extension's tests are a new job in the CI workflow and a new step in
 `scripts/verify.ps1`.
 
+## What the first F5 found
+
+Pressing `F5` asked for "an extension for debugging JSON". The launch
+configuration that tells VS Code how to start the extension had never been
+committed: the repository ignores every `.vscode/` folder, and the file was in
+one. It existed where the extension was written, so nothing there noticed; the
+commit simply did not contain it.
+
+The ignore rule now has an exception for `vscode-extension/.vscode/`. The
+README also gives a way to start the extension that needs no configuration file
+at all, which is the more robust instruction anyway.
+
 ## Not verified
 
 - **The extension has never been run inside VS Code.** Not once. Everything

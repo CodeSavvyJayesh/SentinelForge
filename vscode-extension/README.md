@@ -40,14 +40,17 @@ These two can only be set in user settings. A workspace cannot set them — see
 
 ## Running it
 
-**While developing** — open the `vscode-extension` folder in VS Code and press
-`F5`. A second window opens with the extension loaded; open any folder in it.
-
-**From a terminal**, without opening the extension's folder:
+**From a terminal** — the simplest way, and it needs nothing set up:
 
 ```
 code --extensionDevelopmentPath=C:\SentinelForge\vscode-extension C:\path\to\some\project
 ```
+
+A window opens on that project with the extension loaded.
+
+**While developing** — open the `vscode-extension` folder itself in VS Code (not
+the repository root) and press `F5`. A second window opens with the extension
+loaded; open any folder in it.
 
 **As an installed extension** — package it once, then install the file:
 
