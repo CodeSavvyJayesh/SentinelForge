@@ -2,11 +2,12 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 12 — Dashboard** complete (foundation, accounts, projects, ingestion,
+> Status: **Phase 13 — Reports** complete (foundation, accounts, projects, ingestion,
 > detection, background scans with history, locally-indexed CWE/OWASP knowledge, per-finding
 > explanations from a local model with every citation verified, a deterministic risk score
 > that shows its working, proposed fixes as reviewable diffs, a re-scan of every proposal
-> on a throwaway copy, and a dashboard across everything you have scanned).
+> on a throwaway copy, a dashboard across everything you have scanned, and a report per
+> repository as HTML, Markdown, SARIF or JSON).
 > A proposed fix is still a **suggestion**: nothing is applied to your files. "Checked by
 > re-scan" means the finding is no longer detected, nothing new is, and the change is not a
 > deletion — not that the program still behaves the same. Nothing in the UI is simulated.
@@ -167,7 +168,7 @@ SentinelForge/
 | 10 | Patch generation (proposed diffs) | ✅ Done |
 | 11 | Patch validation (apply to a copy, re-scan) | ✅ Done |
 | 12 | Dashboard across projects | ✅ Done |
-| 13 | Reports | Planned |
+| 13 | Reports (HTML, Markdown, SARIF, JSON) | ✅ Done |
 | 14–16 | DevSecOps integration, VS Code, research evaluation | Planned |
 
 ## Limitations (current)
@@ -213,6 +214,12 @@ SentinelForge/
   own on each request and scores them in memory, which is exact and fast for thousands of
   findings and would need to become SQL aggregation, or a cache, for hundreds of thousands. It
   has no date filter, and its only trend is each repository's score per scan.
+- A report is written from the last completed scan and is not stored: asking again after a new
+  scan gives a different document. There is no PDF export — the HTML report is built to be
+  printed, and a browser's "Save as PDF" is the PDF. Reports contain no model output.
+- The SARIF output follows the 2.1.0 structure and is covered by tests of that structure, but it
+  has not been validated against the official schema file or uploaded to GitHub code scanning
+  yet. That is the first job of the CI phase.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -231,6 +238,7 @@ SentinelForge/
 - [Security: the local model](docs/security/llm.md)
 - [Security: proposed fixes](docs/security/patching.md)
 - [Security: validating a fix](docs/security/validation.md)
+- [Security: reports](docs/security/reports.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
@@ -243,3 +251,4 @@ SentinelForge/
 - [Phase 10 report](docs/development/phases/phase-10-patches.md)
 - [Phase 11 report](docs/development/phases/phase-11-validation.md)
 - [Phase 12 report](docs/development/phases/phase-12-dashboard.md)
+- [Phase 13 report](docs/development/phases/phase-13-reports.md)

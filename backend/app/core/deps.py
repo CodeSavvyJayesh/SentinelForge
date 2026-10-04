@@ -31,6 +31,7 @@ from app.services.knowledge_service import KnowledgeService
 from app.services.patch_service import PatchService
 from app.services.patch_validation_service import PatchValidationService
 from app.services.project_service import ProjectService
+from app.services.report_service import ReportService
 from app.services.repository_service import RepositoryService
 from app.services.risk_service import RiskService
 from app.services.scan_service import ScanService
@@ -114,6 +115,13 @@ def get_dashboard_service(db: DbSession) -> DashboardService:
 
 
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
+
+
+def get_report_service(db: DbSession, settings: AppSettings) -> ReportService:
+    return ReportService(db, settings)
+
+
+ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
 
 
 class _EmbedderHolder:

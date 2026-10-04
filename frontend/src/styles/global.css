@@ -2070,3 +2070,65 @@ a.button {
     grid-template-columns: minmax(40px, 1fr) minmax(2rem, auto);
   }
 }
+
+/* ---------- Reports (Phase 13) ---------- */
+
+.findings__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.report__downloads {
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.report__heading {
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.report__formats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report__formats li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.report__formats .button {
+  min-width: 6.5rem;
+}
+
+.report__purpose,
+.report__note {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.report__note {
+  margin: var(--space-3) 0 0;
+}
+
+/* The report is a light, printable document whatever the app's theme, so it
+   gets a white frame of its own instead of inheriting a dark one. */
+.report__preview {
+  display: block;
+  width: 100%;
+  height: 78vh;
+  min-height: 480px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #f6f8fa;
+}

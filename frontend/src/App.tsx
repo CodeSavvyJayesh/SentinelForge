@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ProjectCreatePage } from './pages/ProjectCreatePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { ReportPage } from './pages/ReportPage'
 import { SystemStatusPage } from './pages/SystemStatusPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -58,6 +59,7 @@ function AuthenticatedApp() {
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/new" element={<ProjectCreatePage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/reports/:repositoryId" element={<ReportPage />} />
         <Route path="/status" element={<SystemStatusPage />} />
         {/* Admin-only route: guarded here and again by the API. */}
         <Route

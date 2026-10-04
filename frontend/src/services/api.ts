@@ -7,6 +7,7 @@ import { createExplanationService } from './explanationService'
 import { createHealthService } from './healthService'
 import { createKnowledgeService } from './knowledgeService'
 import { createProjectService } from './projectService'
+import { createReportService } from './reportService'
 import { createRepositoryService } from './repositoryService'
 import { createPatchService } from './patchService'
 import { createRiskService } from './riskService'
@@ -47,3 +48,4 @@ export const explanationService = createExplanationService(apiClient)
 export const patchService = createPatchService(apiClient)
 export const riskService = createRiskService(apiClient)
 export const dashboardService = createDashboardService(apiClient)
+export const reportService = createReportService(apiClient)

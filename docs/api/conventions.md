@@ -289,6 +289,51 @@ Things a client can rely on:
   `labelled` is `passed + rejected`. `not_judged` is never part of it — a check
   that could not run says nothing about the change.
 
+## Reports
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/repositories/{id}/report` | Bearer | the report as data |
+| `GET /api/v1/repositories/{id}/report/export?format=…` | Bearer | a rendered document, wrapped in JSON |
+| `GET /api/v1/repositories/{id}/report/export?format=…&download=true` | Bearer | the document itself, as a file |
+
+`format` is `markdown` (the default), `html`, `sarif` or `json`. Anything else
+is a 422.
+
+```json
+{"format": "markdown", "filename": "sentinelforge-payments-20261004.md",
+ "media_type": "text/markdown; charset=utf-8", "content": "# Security report: Payments\n…"}
+```
+
+With `download=true` the response is the document, with
+`Content-Disposition: attachment`, `Cache-Control: no-store` and a
+`Content-Security-Policy` that begins with `sandbox`. From a shell:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -o report.sarif \
+  "$API/api/v1/repositories/7/report/export?format=sarif&download=true"
+```
+
+Things a client can rely on:
+
+- **409 `REPORT_NOT_AVAILABLE`** until a scan has completed. There is no empty
+  report: "0 findings" about code nobody analysed would be read as a clean bill
+  of health.
+- **All four formats are rendered from one object**, so they cannot disagree
+  about a count or a score, and the score equals `/risk`.
+- **Only open findings are SARIF results.** Fixed findings are listed in the
+  other formats, in their own section.
+- **`fix_state`** is one of `none`, `rotate`, `generating`, `refused`,
+  `unchecked`, `checking`, `passed`, `rejected`, `not_judged`, taken from the
+  latest validation of the finding's latest patch. `passed` never means applied.
+- **Every export is written to the audit log** (`report.exported`) with the
+  format and the scan it describes. Reading the report as data is an ordinary
+  read and is not.
+- **The filename contains only `a–z`, `0–9` and `-`**, whatever the repository
+  is called.
+
+Repositories also now return `analyzed_at` — when the last scan ran, or null.
+
 ## Explanations
 
 | Endpoint | Auth | Notes |
