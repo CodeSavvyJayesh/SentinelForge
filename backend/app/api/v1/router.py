@@ -10,6 +10,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.patches import router as patches_router
 from app.api.v1.projects import router as projects_router
+from app.api.v1.reports import router as reports_router
 from app.api.v1.repositories import router as repositories_router
 from app.api.v1.risk import router as risk_router
 from app.api.v1.scans import router as scans_router
@@ -27,4 +28,5 @@ api_router.include_router(explanations_router)
 api_router.include_router(patches_router)
 api_router.include_router(risk_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(reports_router)
 api_router.include_router(users_router)

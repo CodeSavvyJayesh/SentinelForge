@@ -53,6 +53,10 @@ class AuditAction(StrEnum):
     PATCH_VALIDATION_REJECTED = "patch.validation_rejected"
     PATCH_VALIDATION_FAILED = "patch.validation_failed"
 
+    # Phase 13. A report is where findings leave this system: who took one, of
+    # which repository and in which format is worth being able to answer later.
+    REPORT_EXPORTED = "report.exported"
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

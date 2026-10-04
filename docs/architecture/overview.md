@@ -168,4 +168,5 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Patch generation: proposed fixes as reviewable diffs, never applied | Implemented (Phase 10) — see [security/patching.md](../security/patching.md) |
 | Patch validation: every proposal applied to a throwaway copy and re-scanned | Implemented (Phase 11) — see [security/validation.md](../security/validation.md) |
 | Dashboard: one owner-scoped read across every project, counted from stored rows | Implemented (Phase 12) |
-| Reports, CI/CD, VS Code, evaluation | Phases 13–16 |
+| Reports per repository: HTML, Markdown, SARIF 2.1.0, JSON — rendered on request, never stored | Implemented (Phase 13) — see [security/reports.md](../security/reports.md) |
+| CI/CD, VS Code, evaluation | Phases 14–16 |

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { EmptyState } from './EmptyState'
 import { FindingExplanation } from './FindingExplanation'
@@ -132,20 +133,28 @@ export function FindingsPanel({ repositoryId, analyzedAt, onScanned }: FindingsP
               : 'This code has not been scanned yet.'}
           </p>
         </div>
-        <button
-          type="button"
-          className="button button--primary button--small"
-          onClick={() => void startScan()}
-          disabled={scanning}
-        >
-          {scanning
-            ? activeScan?.status === 'QUEUED'
-              ? 'Queued…'
-              : 'Scanning…'
-            : analyzedAt
-              ? 'Scan again'
-              : 'Scan code'}
-        </button>
+        <div className="findings__actions">
+          {/* Only once a scan has completed: there is nothing to report on before. */}
+          {analyzedAt && (
+            <Link className="button button--small" to={`/reports/${repositoryId}`}>
+              Report
+            </Link>
+          )}
+          <button
+            type="button"
+            className="button button--primary button--small"
+            onClick={() => void startScan()}
+            disabled={scanning}
+          >
+            {scanning
+              ? activeScan?.status === 'QUEUED'
+                ? 'Queued…'
+                : 'Scanning…'
+              : analyzedAt
+                ? 'Scan again'
+                : 'Scan code'}
+          </button>
+        </div>
       </div>
 
       {scanning && (
