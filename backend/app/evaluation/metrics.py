@@ -144,7 +144,9 @@ class Confusion:
         difference = recall - rate
         below = math.hypot(recall - upper.low, lower.high - rate)
         above = math.hypot(upper.high - recall, rate - lower.low)
-        return Interval(max(-1.0, difference - below), min(1.0, difference + above))
+        # Always within -1..+1: each bound of the difference is at least as far
+        # in as the corresponding bounds of the two rates.
+        return Interval(difference - below, difference + above)
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:

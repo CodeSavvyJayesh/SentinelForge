@@ -11,8 +11,9 @@ scorecard generator does for each tool it supports.
 
 **The table was written before the first measurement and is not adjusted to
 improve one.** It follows the weakness each rule already declared in the rule
-catalogue. Two rows are not word-for-word matches and are stated rather than
-hidden:
+catalogue, and a rule added later is assigned the same way: by the weakness it
+declares, never by which test cases it happens to fire in. Two rows are not
+word-for-word matches and are stated rather than hidden:
 
 * The weak-hash rules declare CWE-327 (broken algorithm) and the benchmark
   files MD5 and SHA-1 under CWE-328 (weak hash). Same weakness, the
@@ -36,6 +37,7 @@ RULE_CATEGORY: dict[str, str] = {
     # Command injection
     "PY002": "cmdi",
     "PY003": "cmdi",
+    "PY016": "cmdi",
     "JS002": "cmdi",
     "JV001": "cmdi",
     "PH001": "cmdi",
@@ -54,13 +56,30 @@ RULE_CATEGORY: dict[str, str] = {
     "PY007": "hash",
     "JS005": "hash",
     "JV003": "hash",
+    # Weak cipher
+    "JV004": "crypto",
     # Weak randomness
     "PY011": "weakrand",
     "JS004": "weakrand",
+    "JV005": "weakrand",
     # Cross-site scripting
     "JS003": "xss",
+    "PY021": "xss",
     # XML external entities
     "PY015": "xxe",
+    # Path traversal
+    "PY017": "pathtraver",
+    # XPath injection
+    "PY018": "xpathi",
+    # LDAP injection
+    "PY019": "ldapi",
+    # Open redirect
+    "PY020": "redirect",
+    # Trust boundary violation
+    "PY022": "trustbound",
+    # Cookie without the Secure attribute
+    "PY023": "securecookie",
+    "JV006": "securecookie",
 }
 
 NOT_IN_BENCHMARK: frozenset[str] = frozenset(

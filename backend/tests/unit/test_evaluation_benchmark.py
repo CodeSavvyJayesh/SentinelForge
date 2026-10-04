@@ -233,7 +233,7 @@ def test_a_rule_only_counts_for_a_language_it_reads() -> None:
 
 
 def test_a_category_with_no_rule_for_the_language_has_no_rules() -> None:
-    assert rules_for("cmdi", frozenset({".py"})) == ("PY002", "PY003")
+    assert rules_for("cmdi", frozenset({".py"})) == ("PY002", "PY003", "PY016")
     assert "JV001" in rules_for("cmdi", frozenset({".java"}))
     assert "PY003" not in rules_for("cmdi", frozenset({".java"}))
     assert rules_for("no-such-category", frozenset({".py"})) == ()

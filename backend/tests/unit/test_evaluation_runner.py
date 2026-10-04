@@ -39,8 +39,8 @@ CASES: dict[str, tuple[str, bool, int, str]] = {
     "Case05": ("cmdi", True, 78, SHELL_AND_HASH),  # TP, plus a finding of another kind
     "Case06": ("hash", True, 328, HASH),  # TP
     "Case07": ("hash", False, 328, QUIET),  # TN
-    "Case08": ("pathtraver", True, 22, SHELL),  # no rule; the finding is of another kind
-    "Case09": ("pathtraver", False, 22, QUIET),
+    "Case08": ("crypto", True, 327, SHELL),  # no rule; the finding is of another kind
+    "Case09": ("crypto", False, 327, QUIET),
 }
 
 
@@ -87,7 +87,7 @@ def test_each_test_case_lands_in_the_cell_it_was_written_for(tmp_path: Path) -> 
     by_category = {item.category: item for item in evaluation.categories}
     assert by_category["cmdi"].confusion == Confusion(tp=2, fp=1, tn=1, fn=1)
     assert by_category["hash"].confusion == Confusion(tp=1, fp=0, tn=1, fn=0)
-    assert by_category["pathtraver"].confusion == Confusion(tp=0, fp=0, tn=1, fn=1)
+    assert by_category["crypto"].confusion == Confusion(tp=0, fp=0, tn=1, fn=1)
     assert evaluation.pooled == Confusion(tp=3, fp=1, tn=3, fn=2)
     assert by_category["cmdi"].cwe == 78
 
@@ -108,23 +108,23 @@ def test_a_finding_of_another_kind_is_counted_and_not_scored(tmp_path: Path) -> 
     # Case05's hash finding and Case08's shell finding.
     assert evaluation.unscored_in_cases == {"PY003": 1, "PY007": 1}
     # ...and Case08 is still a miss: reporting *something* in the file is not
-    # reporting the path traversal it was asked about.
+    # reporting the weak cipher it was asked about.
     assert {item.case.name: item.reported for item in evaluation.outcomes}["Case08"] is False
 
 
 def test_a_category_with_no_rule_says_so(tmp_path: Path) -> None:
     by_category = {item.category: item for item in marked(build(tmp_path)).categories}
 
-    assert by_category["pathtraver"].rules == ()
-    assert not by_category["pathtraver"].has_rule
-    assert by_category["cmdi"].rules == ("PY002", "PY003")
-    assert render.verdict(by_category["pathtraver"]) == "no rule"
+    assert by_category["crypto"].rules == ()
+    assert not by_category["crypto"].has_rule
+    assert by_category["cmdi"].rules == ("PY002", "PY003", "PY016")
+    assert render.verdict(by_category["crypto"]) == "no rule"
 
 
 def test_the_two_overall_figures_differ_by_the_categories_without_a_rule(tmp_path: Path) -> None:
     evaluation = marked(build(tmp_path))
 
-    # cmdi 2/3 - 1/2, hash 1 - 0, pathtraver 0 - 0
+    # cmdi 2/3 - 1/2, hash 1 - 0, crypto 0 - 0
     assert evaluation.average("score") == pytest.approx((1 / 6 + 1 + 0) / 3)
     assert evaluation.average("score", only_with_rule=True) == pytest.approx((1 / 6 + 1) / 2)
     assert evaluation.pooled_with_rule == Confusion(tp=3, fp=1, tn=2, fn=1)
@@ -354,7 +354,7 @@ def test_the_data_holds_counts_and_derives_everything_else(tmp_path: Path) -> No
     assert cmdi["recall"] == 0.6667
     assert cmdi["false_positive_rate"] == 0.5
     assert cmdi["score"] == 0.1667
-    assert cmdi["rules"] == ["PY002", "PY003"]
+    assert cmdi["rules"] == ["PY002", "PY003", "PY016"]
     assert data["overall"]["all_categories"]["categories"] == 3
     assert data["overall"]["categories_with_a_rule"]["categories"] == 2
     assert data["overall"]["all_categories"]["pooled"]["tp"] == 3
@@ -368,13 +368,13 @@ def test_the_data_holds_counts_and_derives_everything_else(tmp_path: Path) -> No
 def test_an_undefined_ratio_is_null_in_data_and_a_dash_on_the_page(tmp_path: Path) -> None:
     evaluation = marked(build(tmp_path))
     data = render.as_data(evaluation)
-    pathtraver = next(item for item in data["categories"] if item["category"] == "pathtraver")
+    crypto = next(item for item in data["categories"] if item["category"] == "crypto")
 
-    assert pathtraver["precision"] is None
-    assert pathtraver["precision_interval"] is None
-    assert pathtraver["f1"] == 0.0
+    assert crypto["precision"] is None
+    assert crypto["precision_interval"] is None
+    assert crypto["f1"] == 0.0
     row = next(
-        line for line in render.as_markdown(evaluation).splitlines() if "| pathtraver | 22" in line
+        line for line in render.as_markdown(evaluation).splitlines() if "| crypto | 327" in line
     )
     assert "| – |" in row
     assert "no rule" in row
@@ -392,7 +392,7 @@ def test_the_table_states_where_the_numbers_came_from(tmp_path: Path) -> None:
     assert "| Test cases marked | 9 (the whole benchmark) |" in page
     assert "| Vulnerable / safe | 5 / 4 |" in page
     assert "| cmdi | 78 | 5 | 2 | 1 | 1 | 1 | 66.7 % | 50.0 % | 66.7 % | 66.7 % | +16.7 |" in page
-    assert "| pathtraver | none: every vulnerable case is missed |" in page
+    assert "| crypto | none: every vulnerable case is missed |" in page
     assert "| PY007 | 1 |" in page
 
 
@@ -792,3 +792,11 @@ def test_the_interpreter_that_parsed_the_benchmark_is_recorded(tmp_path: Path) -
     assert evaluation.python_version == f"{sys.version_info.major}.{sys.version_info.minor}"
     assert render.as_data(evaluation)["analyser"]["python"] == evaluation.python_version
     assert f"| Parsed with | Python {evaluation.python_version} |" in render.as_markdown(evaluation)
+
+
+def test_forty_characters_that_are_not_a_commit_are_not_reported_as_one(tmp_path: Path) -> None:
+    folder = git(tmp_path, "ref: refs/heads/main\n")
+    (folder / "refs" / "heads" / "main").write_text("z" * 40, encoding="utf-8")
+
+    assert commit_of(tmp_path) is None
+    assert commit_of(git(tmp_path / "detached", "G" * 40 + "\n").parent) is None

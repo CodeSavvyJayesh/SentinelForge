@@ -480,3 +480,285 @@ def test_a_secret_on_a_minified_line_is_still_found() -> None:
     line = f'{"a=b(c);" * 400}var t="{GITHUB_TOKEN}";'
 
     assert [f.rule_id for f in analyze_secrets(line, "static/app.min.js")] == ["SEC003"]
+
+
+# =============================================================================
+# Rules added or corrected after measuring against a benchmark (Phase 16)
+# =============================================================================
+
+
+def lines_reported(source: str, rule_id: str, suffix: str = ".java") -> list[int]:
+    return [
+        finding.line_start
+        for finding in analyze_with_patterns(source, f"Sample{suffix}", suffix)
+        if finding.rule_id == rule_id
+    ]
+
+
+# --- SQL001: the query the first version of the rule could not see -------------
+
+
+def test_a_query_with_a_quote_of_the_other_kind_inside_it_is_reported() -> None:
+    """The commonest injectable query there is. The first pattern stopped at the `'`."""
+    source = """String q = "SELECT * FROM users WHERE name = '" + name + "'";"""
+    assert "SQL001" in pattern_rules(source, ".java")
+
+
+def test_an_escaped_quote_inside_the_query_does_not_end_it() -> None:
+    source = r"""String q = "SELECT * FROM t WHERE label = \"x\" AND id = " + id;"""
+    assert "SQL001" in pattern_rules(source, ".java")
+
+
+def test_a_value_joined_before_the_query_text_is_reported() -> None:
+    assert "SQL001" in pattern_rules('String q = prefix + " select * from users";', ".java")
+
+
+def test_two_literals_joined_together_are_one_long_string_not_a_built_query() -> None:
+    source = 'String q = "SELECT id, name FROM users " + "WHERE active = ?";'
+    assert "SQL001" not in pattern_rules(source, ".java")
+
+
+def test_sql_in_a_literal_that_is_not_joined_to_anything_is_not_reported() -> None:
+    assert "SQL001" not in pattern_rules('String q = "SELECT * FROM users";', ".java")
+    assert "SQL001" not in pattern_rules('log.info("select all") ; total = a + b;', ".java")
+
+
+def test_a_join_elsewhere_on_the_line_of_two_non_sql_things_does_not_count() -> None:
+    source = 'String label = "Please select an option"; int total = count + 1;'
+    assert "SQL001" not in pattern_rules(source, ".java")
+
+
+def test_a_template_literal_with_a_value_interpolated_is_reported() -> None:
+    assert "SQL001" in pattern_rules("const q = `SELECT * FROM users WHERE id = ${id}`;", ".ts")
+    assert "SQL001" not in pattern_rules("const q = `SELECT * FROM users`;", ".ts")
+
+
+def test_a_query_wrapped_onto_the_next_line_is_reported_where_the_sql_is() -> None:
+    source = (
+        "String query =\n"
+        '        "SELECT * FROM employees WHERE last_name = \'"\n'
+        "                + name\n"
+        '                + "\'";\n'
+    )
+    assert lines_reported(source, "SQL001") == [2]
+
+
+def test_a_long_literal_wrapped_onto_the_next_line_is_not_reported() -> None:
+    source = (
+        "String query =\n"
+        '        "INSERT INTO users(username, password, admin)"\n'
+        '                + " VALUES(:username, :password, :admin)";\n'
+    )
+    assert lines_reported(source, "SQL001") == []
+
+
+def test_a_wrapped_query_is_one_finding_not_one_per_line() -> None:
+    source = (
+        'String query = "SELECT * FROM a WHERE x = " + x\n'
+        '        + " AND y = " + y\n'
+        '        + " AND z = " + z;\n'
+    )
+    assert lines_reported(source, "SQL001") == [1]
+
+
+def test_a_line_that_ends_with_a_plus_is_reported_where_lines_are_not_joined() -> None:
+    """JavaScript is read a line at a time; what the plus leads to cannot be seen."""
+    source = 'const q = "SELECT * FROM users WHERE id = " +\n    id;\n'
+    assert lines_reported(source, "SQL001", ".js") == [1]
+
+
+def test_the_sql_rule_is_fast_on_a_line_made_of_quotes() -> None:
+    """A second version of the pattern took minutes on a real repository."""
+    import time
+
+    line = "x = " + " + ".join(['"a\'b"'] * 110) + ' + "select";'
+    assert len(line) < 1000
+    started = time.monotonic()
+
+    for _ in range(200):
+        analyze_with_patterns(line, "Sample.java", ".java")
+
+    assert time.monotonic() - started < 2.0
+
+
+# --- JV003: a hash named with a provider, in any case -----------------------------
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        'MessageDigest.getInstance("MD5")',
+        'MessageDigest.getInstance("SHA1", "SUN")',
+        'MessageDigest.getInstance("sha-1", provider[0])',
+        'java.security.MessageDigest.getInstance("MD2")',
+    ],
+)
+def test_a_weak_hash_is_reported_with_or_without_a_provider(call: str) -> None:
+    assert "JV003" in pattern_rules(f"MessageDigest md = {call};", ".java")
+
+
+@pytest.mark.parametrize("name", ["SHA-256", "SHA-512", "sha-384", "SHA512"])
+def test_a_strong_hash_is_not_reported_with_a_provider_either(name: str) -> None:
+    assert "JV003" not in pattern_rules(f'MessageDigest.getInstance("{name}", "SUN");', ".java")
+
+
+# --- JV004: weak ciphers -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        'Cipher.getInstance("DES/CBC/PKCS5Padding")',
+        'Cipher.getInstance("DESede/ECB/PKCS5Padding", "SunJCE")',
+        'Cipher.getInstance("AES/ECB/PKCS5Padding")',
+        'Cipher.getInstance("RC4")',
+        'Cipher.getInstance("Blowfish")',
+        'javax.crypto.KeyGenerator.getInstance("DES").generateKey()',
+    ],
+)
+def test_a_weak_cipher_is_reported(call: str) -> None:
+    assert "JV004" in pattern_rules(f"Object c = {call};", ".java")
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        'Cipher.getInstance("AES/GCM/NoPadding")',
+        'Cipher.getInstance("AES/CCM/NoPadding", provider)',
+        'KeyGenerator.getInstance("AES")',
+        "Cipher.getInstance(algorithm)",
+        'String name = "DES/CBC/PKCS5Padding"',
+        'Mac.getInstance("DESMAC")',
+    ],
+)
+def test_a_strong_cipher_or_something_that_is_not_one_is_not_reported(call: str) -> None:
+    assert "JV004" not in pattern_rules(f"Object c = {call};", ".java")
+
+
+def test_a_cipher_named_on_the_line_after_the_call_is_reported() -> None:
+    source = (
+        "javax.crypto.Cipher c =\n"
+        "        javax.crypto.Cipher.getInstance(\n"
+        '                "DES/CBC/PKCS5PADDING", java.security.Security.getProvider("SunJCE"));\n'
+    )
+    assert lines_reported(source, "JV004") == [2]
+
+
+def test_wrapped_statements_are_only_joined_for_java() -> None:
+    source = 'Cipher c =\n    Cipher.getInstance(\n        "DES/CBC/PKCS5PADDING");\n'
+    assert lines_reported(source, "JV004", ".kt") == []
+
+
+def test_a_statement_is_not_joined_to_the_one_after_it() -> None:
+    source = 'Cipher.getInstance(algorithm);\nString label = "DES/CBC is not allowed";\n'
+    assert lines_reported(source, "JV004") == []
+
+
+# --- JV005: weak randomness near a secret -------------------------------------------
+
+
+def test_a_weak_generator_near_a_secret_is_reported() -> None:
+    source = (
+        "float rand = new java.util.Random().nextFloat();\n"
+        "String rememberMeKey = Float.toString(rand).substring(2);\n"
+    )
+    assert lines_reported(source, "JV005") == [1]
+
+
+@pytest.mark.parametrize(
+    "generator",
+    ["new Random()", "new java.util.Random(seed)", "Math.random()", "ThreadLocalRandom.current()"],
+)
+def test_every_predictable_generator_is_recognised(generator: str) -> None:
+    assert "JV005" in pattern_rules(f"String sessionToken = String.valueOf({generator});", ".java")
+
+
+def test_a_weak_generator_with_no_secret_nearby_is_not_reported() -> None:
+    source = "int roll = new Random().nextInt(6);\nboard.move(roll);\n" + "render();\n" * 6
+    assert "JV005" not in pattern_rules(source, ".java")
+
+
+def test_a_secret_further_away_than_the_window_does_not_count() -> None:
+    source = (
+        "int roll = new Random().nextInt(6);\n" + "render();\n" * 5 + "String token = load();\n"
+    )
+    near = "int roll = new Random().nextInt(6);\n" + "render();\n" * 4 + "String token = load();\n"
+
+    assert "JV005" not in pattern_rules(source, ".java")
+    assert "JV005" in pattern_rules(near, ".java")
+
+
+def test_a_secure_generator_near_a_secret_is_not_reported() -> None:
+    source = (
+        'double value = java.security.SecureRandom.getInstance("SHA1PRNG").nextDouble();\n'
+        "String rememberMeKey = Double.toString(value);\n"
+        "byte[] token = new SecureRandom().generateSeed(16);\n"
+    )
+    assert "JV005" not in pattern_rules(source, ".java")
+
+
+# --- JV006: cookie without the Secure attribute --------------------------------------
+
+
+def test_a_cookie_made_insecure_is_reported() -> None:
+    assert "JV006" in pattern_rules("cookie.setSecure(false);", ".java")
+    assert "JV006" in pattern_rules("cookie.setSecure( false );", ".java")
+
+
+def test_a_secure_cookie_or_one_decided_elsewhere_is_not_reported() -> None:
+    assert "JV006" not in pattern_rules("cookie.setSecure(true);", ".java")
+    assert "JV006" not in pattern_rules("cookie.setSecure(isProduction);", ".java")
+    assert "JV006" not in pattern_rules("// cookie.setSecure(false) was the old behaviour", ".java")
+
+
+# --- found by breaking a rule on purpose and seeing no test fail --------------------------
+
+
+def test_a_long_literal_split_after_the_plus_is_not_reported_in_java() -> None:
+    source = 'String q = "SELECT a FROM t " +\n        "WHERE x = ?";\n'
+    assert lines_reported(source, "SQL001") == []
+
+
+def test_quotes_escaped_inside_a_literal_do_not_make_it_two_literals() -> None:
+    """Read naively, this is `"a \\"` joined to `b`: a query built from a value."""
+    source = r"""String text = "a \" + b + \" select c";"""
+    assert "SQL001" not in pattern_rules(source, ".java")
+
+
+def test_a_statement_is_reported_on_one_of_its_lines_not_on_each_that_has_sql() -> None:
+    source = (
+        "String q =\n"
+        '        "SELECT a FROM t "\n'
+        '                + "WHERE id IN (SELECT id FROM u WHERE n = \'" + n + "\')";\n'
+    )
+    assert lines_reported(source, "SQL001") == [3]
+
+
+def test_a_join_in_the_next_statement_does_not_make_this_one_a_built_query() -> None:
+    source = 'String a = "SELECT 1 FROM t";\nString b = "x" + y;\n'
+    assert lines_reported(source, "SQL001") == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        """String q = "UPDATE users SET name = '" + name + "' WHERE id = 1";""",
+        'String q = "update `users` set active = " + flag;',
+        'String q = "UPDATE " + table + " SET active = 0";',
+    ],
+)
+def test_an_update_statement_built_from_a_value_is_reported(line: str) -> None:
+    assert "SQL001" in pattern_rules(line, ".java")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'log.warn("Failed to update " + name);',
+        "console.log('lock the new state with ' + colors.bold('npm run rsn:update'))",
+        'String message = "No update for " + user + " was set";',
+    ],
+)
+def test_the_word_update_in_a_message_is_not_a_query(line: str) -> None:
+    assert "SQL001" not in pattern_rules(line, ".java")
+    assert "SQL001" not in pattern_rules(line, ".js")

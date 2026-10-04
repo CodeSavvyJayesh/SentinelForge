@@ -155,3 +155,13 @@ def test_mcnemar_has_nothing_to_say_when_no_case_changed() -> None:
     assert mcnemar(0, 0) is None
     with pytest.raises(ValueError, match="negative"):
         mcnemar(-1, 3)
+
+
+@pytest.mark.parametrize("trials", [1, 7, 100, 20000])
+def test_an_interval_never_excludes_what_was_observed_at_either_end(trials: int) -> None:
+    """Rounding in the square root must not report 0.99999 as the top of 20000/20000."""
+    none, every = wilson(0, trials), wilson(trials, trials)
+    assert none is not None and every is not None
+
+    assert none.low == 0.0
+    assert every.high == 1.0
