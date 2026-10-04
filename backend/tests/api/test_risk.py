@@ -23,6 +23,7 @@ from app.models import (
     Scan,
     Severity,
 )
+from app.risk import policy
 
 pytestmark = pytest.mark.integration
 
@@ -206,7 +207,7 @@ def test_a_completed_scan_records_the_score_it_produced(
     assert stored.risk_score is not None
     assert stored.risk_score > 0
     assert stored.risk_grade in {"A", "B", "C", "D", "F"}
-    assert stored.risk_policy_version == 1
+    assert stored.risk_policy_version == policy.POLICY_VERSION
 
 
 def test_history_is_oldest_first_and_skips_scans_without_a_score(

@@ -2,12 +2,13 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 13 — Reports** complete (foundation, accounts, projects, ingestion,
-> detection, background scans with history, locally-indexed CWE/OWASP knowledge, per-finding
-> explanations from a local model with every citation verified, a deterministic risk score
-> that shows its working, proposed fixes as reviewable diffs, a re-scan of every proposal
-> on a throwaway copy, a dashboard across everything you have scanned, and a report per
-> repository as HTML, Markdown, SARIF or JSON).
+> Status: **Phase 14 — DevSecOps integration** complete (foundation, accounts, projects,
+> ingestion, detection, background scans with history, locally-indexed CWE/OWASP knowledge,
+> per-finding explanations from a local model with every citation verified, a deterministic
+> risk score that shows its working, proposed fixes as reviewable diffs, a re-scan of every
+> proposal on a throwaway copy, a dashboard, reports as HTML, Markdown, SARIF or JSON, a
+> command-line scanner with a quality gate for build pipelines, a GitHub Actions workflow,
+> and Docker Compose packaging).
 > A proposed fix is still a **suggestion**: nothing is applied to your files. "Checked by
 > re-scan" means the finding is no longer detected, nothing new is, and the change is not a
 > deletion — not that the program still behaves the same. Nothing in the UI is simulated.
@@ -152,6 +153,30 @@ SentinelForge/
 └── scripts/verify.ps1     run all checks on Windows
 ```
 
+## In a build pipeline
+
+The scanner also runs from a terminal, with no database, no account and no
+configuration. It reads a folder, executes nothing in it, and exits 0, 1 or 2.
+
+```bash
+cd backend
+python -m app.cli scan ../path/to/code                       # fail on HIGH or worse
+python -m app.cli scan . --sarif out.sarif                   # also write SARIF
+python -m app.cli scan . --baseline out.sarif                # fail only on what is new
+```
+
+See [the command-line scanner](docs/devsecops/command-line.md). The workflow in
+`.github/workflows/ci.yml` runs it on every push and pull request.
+
+## With Docker
+
+```bash
+cp docker.env.example .env      # then fill in the two values it asks for
+docker compose up --build       # http://localhost:5173
+```
+
+See [running with Docker](docs/devsecops/docker.md).
+
 ## Roadmap
 
 | Phase | Milestone | Status |
@@ -169,7 +194,9 @@ SentinelForge/
 | 11 | Patch validation (apply to a copy, re-scan) | ✅ Done |
 | 12 | Dashboard across projects | ✅ Done |
 | 13 | Reports (HTML, Markdown, SARIF, JSON) | ✅ Done |
-| 14–16 | DevSecOps integration, VS Code, research evaluation | Planned |
+| 14 | DevSecOps integration (command-line scanner, quality gate, CI workflow, Docker Compose) | ✅ Done |
+| 15 | VS Code extension | Planned |
+| 16 | Research evaluation | Planned |
 
 ## Limitations (current)
 
@@ -220,6 +247,13 @@ SentinelForge/
 - The SARIF output follows the 2.1.0 structure and is covered by tests of that structure, but it
   has not been validated against the official schema file or uploaded to GitHub code scanning
   yet. That is the first job of the CI phase.
+- The quality gate judges by severity, by risk score, or against a baseline. It has no
+  per-finding suppression ("ignore this one line"): the only ways to leave something out are a
+  path exclusion, which is printed in every run, and a baseline.
+- The Docker images and the GitHub Actions workflow were written and checked as far as they can
+  be without running them — the compose file is validated and the scan step was run exactly as
+  written on a clean copy — but **no image was built and no workflow run happened** before
+  they were committed. Their first real run is the test.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -239,6 +273,8 @@ SentinelForge/
 - [Security: proposed fixes](docs/security/patching.md)
 - [Security: validating a fix](docs/security/validation.md)
 - [Security: reports](docs/security/reports.md)
+- [The command-line scanner and the quality gate](docs/devsecops/command-line.md)
+- [Running with Docker](docs/devsecops/docker.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
@@ -252,3 +288,4 @@ SentinelForge/
 - [Phase 11 report](docs/development/phases/phase-11-validation.md)
 - [Phase 12 report](docs/development/phases/phase-12-dashboard.md)
 - [Phase 13 report](docs/development/phases/phase-13-reports.md)
+- [Phase 14 report](docs/development/phases/phase-14-devsecops.md)

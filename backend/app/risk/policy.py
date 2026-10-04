@@ -76,6 +76,10 @@ VENDORED_MARKERS = frozenset(
     {
         "node_modules",
         "vendor",
+        # Where a web application keeps the copies of jQuery and friends it
+        # ships. Plural only: a singular `lib/` is as often the project's own
+        # code as somebody else's, and discounting that would hide real work.
+        "libs",
         "vendored",
         "third_party",
         "thirdparty",
@@ -89,6 +93,10 @@ VENDORED_MARKERS = frozenset(
         "site-packages",
     }
 )
+# A bundled library also gives itself away by its name, wherever it is put:
+# `require.min.js` is minified, and nobody writes `wysihtml5-0.3.0.js` by hand.
+# Matched against the file name only.
+VENDORED_FILENAME_PATTERN = r"(?:\.min\.(?:js|css)|[-.]v?\d+\.\d+(?:\.\d+)*(?:\.min)?\.(?:js|css))$"
 EXAMPLE_MARKERS = frozenset({"example", "examples", "sample", "samples", "demo", "demos", "docs"})
 
 # --- secrets are different -------------------------------------------------
@@ -137,7 +145,7 @@ GRADE_THRESHOLDS: tuple[tuple[float, str], ...] = (
     (MAX_SCORE + 1, "F"),
 )
 
-POLICY_VERSION = 1
+POLICY_VERSION = 2
 """Bumped whenever a constant above changes.
 
 Stored with every snapshot, so a score taken last month is comparable only to
@@ -163,6 +171,7 @@ __all__ = [
     "SEVERITY_BASE",
     "TEST_MARKERS",
     "TEST_PATH_FACTOR",
+    "VENDORED_FILENAME_PATTERN",
     "VENDORED_MARKERS",
     "VENDORED_PATH_FACTOR",
 ]

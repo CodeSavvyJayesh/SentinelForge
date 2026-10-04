@@ -13,6 +13,7 @@ It is also the difference between a number this project can defend and one it
 merely produces.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -83,7 +84,7 @@ def path_factor(finding: Finding) -> Factor:
 
     if segments & policy.TEST_MARKERS or looks_like_test:
         return Factor("test path", policy.TEST_PATH_FACTOR, "in test or fixture code")
-    if segments & policy.VENDORED_MARKERS:
+    if segments & policy.VENDORED_MARKERS or re.search(policy.VENDORED_FILENAME_PATTERN, name):
         return Factor(
             "vendored path", policy.VENDORED_PATH_FACTOR, "in dependency or generated code"
         )

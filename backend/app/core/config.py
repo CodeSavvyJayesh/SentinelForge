@@ -247,4 +247,16 @@ def get_settings() -> Settings:
     return Settings()
 
 
-settings: Settings = get_settings()
+def __getattr__(name: str) -> Settings:
+    """``from app.core.config import settings``, built when first asked for.
+
+    It used to be built when this module was imported, which meant that
+    importing *anything* from here — the ``Settings`` class included — required
+    a database URL and a signing key. The command-line scanner needs neither
+    and runs where neither exists, and it crashed on its first import in a
+    clean checkout. The application still fails at startup when it is
+    misconfigured: ``app.core.database`` asks for ``settings`` as it is loaded.
+    """
+    if name == "settings":
+        return get_settings()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

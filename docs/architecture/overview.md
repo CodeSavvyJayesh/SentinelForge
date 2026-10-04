@@ -169,4 +169,5 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Patch validation: every proposal applied to a throwaway copy and re-scanned | Implemented (Phase 11) — see [security/validation.md](../security/validation.md) |
 | Dashboard: one owner-scoped read across every project, counted from stored rows | Implemented (Phase 12) |
 | Reports per repository: HTML, Markdown, SARIF 2.1.0, JSON — rendered on request, never stored | Implemented (Phase 13) — see [security/reports.md](../security/reports.md) |
-| CI/CD, VS Code, evaluation | Phases 14–16 |
+| Pipeline integration: a command-line scanner with a quality gate, a CI workflow, Docker Compose | Implemented (Phase 14) — see [devsecops/command-line.md](../devsecops/command-line.md) |
+| VS Code, evaluation | Phases 15–16 |

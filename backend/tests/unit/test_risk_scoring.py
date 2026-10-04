@@ -16,6 +16,8 @@ the properties a reviewer actually relies on.
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.models import Confidence, Finding, FindingStatus, Severity
 from app.risk import policy
 from app.risk.scoring import aggregate, grade_for, path_factor, score_finding
@@ -149,6 +151,47 @@ def test_path_matching_uses_segments_not_substrings() -> None:
 def test_test_filenames_are_recognised_as_well_as_directories() -> None:
     for path in ("app/test_auth.py", "src/auth.spec.ts", "lib/auth.test.js"):
         assert path_factor(finding(file_path=path)).value == policy.TEST_PATH_FACTOR, path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/main/resources/static/js/libs/ace.js",
+        "web/LIBS/chart.js",
+        "static/js/require.min.js",
+        "assets/site.min.css",
+        "static/plugins/editor/js/wysihtml5-0.3.0.js",
+        "public/jquery-3.7.1.min.js",
+        "public/bootstrap.v5.3.js",
+    ],
+)
+def test_a_bundled_library_is_vendored_wherever_it_is_put(path: str) -> None:
+    factor = path_factor(finding(file_path=path))
+
+    assert factor.name == "vendored path"
+    assert factor.value == policy.VENDORED_PATH_FACTOR
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "lib/payments.js",  # singular: as often the project's own code
+        "app/plugins/audit.js",
+        "src/api.v2.js",
+        "src/handler-2.js",
+        "src/minify.js",
+        "src/admin.js",
+        "app/release-1.2.py",  # only scripts and stylesheets are shipped this way
+    ],
+)
+def test_the_projects_own_code_is_not_mistaken_for_a_library(path: str) -> None:
+    assert path_factor(finding(file_path=path)).name == "application path"
+
+
+def test_a_secret_in_a_bundled_library_gets_no_discount() -> None:
+    factor = path_factor(finding(rule_id="SEC003", file_path="static/js/libs/config.min.js"))
+
+    assert factor.value == policy.SECRET_PATH_FACTOR
 
 
 def test_vendored_and_example_paths_are_discounted_differently() -> None:

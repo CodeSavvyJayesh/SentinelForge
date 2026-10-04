@@ -90,7 +90,9 @@ def render(report: Report) -> str:
         add(f"| Commit | {code_span(report.commit_hash)} |")
     if report.primary_language:
         add(f"| Main language | {text(report.primary_language)} |")
-    add(f"| Last scan | {format_when(report.scan.finished_at)} (scan {report.scan.id}) |")
+    # A scan run from the command line is not a stored row and has no number.
+    numbered = f" (scan {report.scan.id})" if report.scan.id else ""
+    add(f"| Last scan | {format_when(report.scan.finished_at)}{numbered} |")
     add(f"| Files analysed | {report.scan.files_scanned} |")
     if report.scan.unparsable_files:
         add(f"| Files that could not be parsed | {report.scan.unparsable_files} |")

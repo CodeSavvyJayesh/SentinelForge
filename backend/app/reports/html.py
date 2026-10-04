@@ -113,12 +113,9 @@ def render(report: Report) -> str:
         add(_fact("Commit", f"<code>{esc(report.commit_hash)}</code>"))
     if report.primary_language:
         add(_fact("Main language", esc(report.primary_language)))
-    add(
-        _fact(
-            "Last scan",
-            f"{esc(format_when(report.scan.finished_at))} (scan {esc(report.scan.id)})",
-        )
-    )
+    # A scan run from the command line is not a stored row and has no number.
+    numbered = f" (scan {esc(report.scan.id)})" if report.scan.id else ""
+    add(_fact("Last scan", f"{esc(format_when(report.scan.finished_at))}{numbered}"))
     add(_fact("Files analysed", esc(report.scan.files_scanned)))
     if report.scan.unparsable_files:
         add(_fact("Files that could not be parsed", esc(report.scan.unparsable_files)))
@@ -203,10 +200,12 @@ def render(report: Report) -> str:
         add(f"<li>{esc(limitation)}</li>")
     add("</ul>")
 
-    add(
-        f"<footer>{esc(report.tool_name)} {esc(report.tool_version)} · repository "
-        f"{esc(report.repository_id)} · scan {esc(report.scan.id)}</footer>"
+    stored = (
+        f" · repository {esc(report.repository_id)} · scan {esc(report.scan.id)}"
+        if report.scan.id
+        else ""
     )
+    add(f"<footer>{esc(report.tool_name)} {esc(report.tool_version)}{stored}</footer>")
     add("</main>")
     add("</body>")
     add("</html>")
