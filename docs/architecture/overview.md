@@ -167,4 +167,5 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Deterministic risk scoring with per-factor explanations | Implemented (Phase 9) |
 | Patch generation: proposed fixes as reviewable diffs, never applied | Implemented (Phase 10) — see [security/patching.md](../security/patching.md) |
 | Patch validation: every proposal applied to a throwaway copy and re-scanned | Implemented (Phase 11) — see [security/validation.md](../security/validation.md) |
-| Dashboard, reports, CI/CD, VS Code, evaluation | Phases 12–16 |
+| Dashboard: one owner-scoped read across every project, counted from stored rows | Implemented (Phase 12) |
+| Reports, CI/CD, VS Code, evaluation | Phases 13–16 |
