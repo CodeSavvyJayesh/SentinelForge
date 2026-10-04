@@ -1,0 +1,4 @@
+test/**
+support/**
+.vscode/**
+**/*.test.js

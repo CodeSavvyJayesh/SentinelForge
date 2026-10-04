@@ -25,6 +25,7 @@ function Invoke-Step([string]$Name, [string]$Dir, [scriptblock]$Command) {
 
 $backend = Join-Path $root "backend"
 $frontend = Join-Path $root "frontend"
+$extension = Join-Path $root "vscode-extension"
 $python = Join-Path $backend "venv\Scripts\python.exe"
 
 Invoke-Step "Backend: ruff lint"          $backend  { & $python -m ruff check . }
@@ -35,6 +36,9 @@ Invoke-Step "Backend: pytest"             $backend  { & $python -m pytest }
 Invoke-Step "Frontend: eslint"            $frontend { npm run lint }
 Invoke-Step "Frontend: vitest"            $frontend { npm run test }
 Invoke-Step "Frontend: typecheck + build" $frontend { npm run build }
+# The extension's tests run the real scanner when they are told where Python is.
+$env:SENTINELFORGE_PYTHON = $python
+Invoke-Step "Extension: tests"            $extension { node --test }
 
 Write-Host ""
 if ($failed.Count -eq 0) {

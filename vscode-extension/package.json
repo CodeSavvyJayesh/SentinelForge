@@ -1,0 +1,100 @@
+{
+  "name": "sentinelforge",
+  "displayName": "SentinelForge",
+  "description": "Shows SentinelForge security findings on the lines they are on. Runs the scanner locally; nothing in the workspace is executed.",
+  "version": "0.1.0",
+  "publisher": "CodeSavvyJayesh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodeSavvyJayesh/SentinelForge.git",
+    "directory": "vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Linters"
+  ],
+  "keywords": [
+    "security",
+    "sast",
+    "vulnerability",
+    "devsecops"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The scanner reads the workspace and executes nothing in it. The interpreter and the scanner's location come from user settings only and cannot be set by a workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "The scanner reads files from disk."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "sentinelforge.scanWorkspace",
+        "title": "Scan workspace",
+        "category": "SentinelForge"
+      },
+      {
+        "command": "sentinelforge.openReport",
+        "title": "Open report",
+        "category": "SentinelForge"
+      },
+      {
+        "command": "sentinelforge.clear",
+        "title": "Clear findings",
+        "category": "SentinelForge"
+      }
+    ],
+    "configuration": {
+      "title": "SentinelForge",
+      "properties": {
+        "sentinelforge.backendPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "The full path of SentinelForge's `backend` folder, for example `C:\\SentinelForge\\backend`. **User setting only**: a workspace cannot set this, because it decides which code is run."
+        },
+        "sentinelforge.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "scope": "machine",
+          "markdownDescription": "The Python interpreter that has the backend's requirements installed, for example `C:\\SentinelForge\\backend\\venv\\Scripts\\python.exe`. **User setting only**: a workspace cannot set this."
+        },
+        "sentinelforge.scanOnSave": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "Scan again whenever a file is saved."
+        },
+        "sentinelforge.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "Paths or globs whose findings are left out, for example `tests` or `*.min.js`. The number left out is shown in the status bar's tooltip."
+        },
+        "sentinelforge.timeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 5,
+          "maximum": 1800,
+          "scope": "machine",
+          "description": "Give up on a scan after this many seconds."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
