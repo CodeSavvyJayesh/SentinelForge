@@ -156,6 +156,48 @@ The upload runs even when the gate failed — a failed build is exactly when the
 findings need to be visible — and is allowed to fail on its own, because code
 scanning is not available for every repository.
 
+## Marking the analyser against a benchmark
+
+A second command answers a different question: not "what is in this code" but
+"how often is the analyser right". It needs a benchmark — a folder of test
+cases with a published answer key — and nothing else.
+
+```bash
+python -m app.cli evaluate PATH [--split all|development|held-out]
+```
+
+```text
+SentinelForge 0.1.0 against OWASP Benchmark for Python 0.1
+  622 test cases (held-out): 220 vulnerable, 402 safe; 2535 files analysed in 3.2 s
+
+  category         cases   TP   FN   FP   TN   recall  FP rate precision       F1  score  reading
+  cmdi                10    4    2    1    3   66.7 %   25.0 %    80.0 %   72.7 %  +41.7  not distinguishable from guessing
+  codeinj             27   10    0    0   17  100.0 %    0.0 %   100.0 %  100.0 % +100.0  better than guessing
+  ...
+```
+
+| Option | What it does |
+| --- | --- |
+| `--expected CSV` | the answer key, when it is not the `expectedresults-*.csv` in the folder |
+| `--split` | mark every test case, or one fixed half of them |
+| `--json FILE`, `--markdown FILE`, `--cases FILE` | record the result: the counts, the table, and every test case with its verdict |
+| `--compare CSV` | a `--cases` file from an earlier run: how many test cases changed, and whether that is more than chance |
+| `--check JSON` | a `--json` file from an earlier run: exit 1 unless this run reproduces it |
+
+Exit codes follow the same rule as the scanner's: `0` the benchmark was marked
+(and, with `--check`, matches the record), `1` `--check` found a different
+result, `2` it could not be marked.
+
+It refuses rather than guesses. A test case whose file is missing, cannot be
+read, or **cannot be parsed by this Python** stops the run with exit code 2: a
+skipped file would be counted as "nothing found" and be indistinguishable from
+a correct silence. The Python benchmark needs Python 3.12 or newer for that
+reason.
+
+Like the scanner, it reads the folder and executes nothing in it. The method,
+the recorded results and what they do not show are in
+[the evaluation](../evaluation/README.md).
+
 ## Limitations
 
 - **No per-finding suppression.** There is no "ignore this line" comment. The
