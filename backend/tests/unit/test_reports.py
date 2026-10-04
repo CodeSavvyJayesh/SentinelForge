@@ -406,7 +406,7 @@ def test_the_markdown_report_says_what_it_found_and_what_it_does_not_claim() -> 
     assert "| Repository | `payments.zip` |" in document
     assert "| Branch | `main` |" in document
     assert "| Commit | `abc123` |" in document
-    assert "**Risk grade C** (40 out of 100, scoring policy v1)" in document
+    assert "**Risk grade C** (40 out of 100, scoring policy v2)" in document
     assert "- Open findings: **1** (0 first seen in the last scan)" in document
     assert "| CRITICAL | 1 |" in document and "| INFO | 0 |" in document
     assert "### PY010: SQL query built by string formatting" in document
@@ -670,6 +670,29 @@ def test_sarif_leaves_out_what_it_does_not_know() -> None:
     assert rule["properties"]["tags"] == ["security"]
     assert "help" not in rule and "fullDescription" not in rule
     assert "snippet" not in run["results"][0]["locations"][0]["physicalLocation"]["region"]
+
+
+def test_a_folder_with_a_commit_but_no_address_gets_no_provenance() -> None:
+    """`repositoryUri` has to be a URI. A local folder has a name."""
+    run = sarif_report.render(report(commit_hash="abc123", origin="payments"))["runs"][0]
+
+    assert "versionControlProvenance" not in run
+
+
+def test_against_a_baseline_each_result_says_whether_it_is_new() -> None:
+    built = report([finding(), finding(id=2, fingerprint="f2", line_start=30)])
+
+    without = sarif_report.render(built)["runs"][0]["results"]
+    against = sarif_report.render(built, baseline=frozenset({"f2"}))["runs"][0]["results"]
+    empty = sarif_report.render(built, baseline=frozenset())["runs"][0]["results"]
+
+    assert all("baselineState" not in result for result in without)
+    assert {
+        result["partialFingerprints"]["sentinelforge/v1"]: result["baselineState"]
+        for result in against
+    } == {"f1": "new", "f2": "unchanged"}
+    # An empty baseline is still a baseline: everything is new, and says so.
+    assert [result["baselineState"] for result in empty] == ["new", "new"]
 
 
 def test_a_clean_repository_is_a_valid_empty_run() -> None:

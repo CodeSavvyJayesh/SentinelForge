@@ -1,0 +1,12 @@
+# Never in the image: local secrets, local state, and anything not needed to run.
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+workspaces/
+tests/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

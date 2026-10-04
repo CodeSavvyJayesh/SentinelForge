@@ -23,6 +23,9 @@ from app.core.config import BACKEND_DIR
 AWS_ACCESS_KEY_ID = "AKIA" + "IOSFODNN7EXAMPLE"
 GITHUB_TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
 PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
+# Not a key: base64 of the alphabet, long enough to look like the first line
+# of one. Invented for the tests.
+PRIVATE_KEY_BODY = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5QUJDREVGR0hJSktMTU5P"
 
 
 def alembic_config() -> Config:

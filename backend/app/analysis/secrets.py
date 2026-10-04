@@ -20,6 +20,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from app.analysis.credential_names import describes_a_credential, is_not_a_credential
 from app.analysis.findings import Finding, clean_snippet
 from app.analysis.rules import (
     SECRET_AWS_KEY,
@@ -85,6 +86,32 @@ SECRET_RULES: tuple[SecretRule, ...] = (
     ),
 )
 
+# The header alone is not a key. Code that *handles* keys is full of it:
+# `pem.replace("-----BEGIN PRIVATE KEY-----", "")` strips one, and
+# `"-----BEGIN PRIVATE KEY-----\\n" + encoded` builds one at runtime. What makes
+# a line a leaked key is the base64 that follows the header, on the same line
+# or on the next ones.
+KEY_BODY = re.compile(r"[A-Za-z0-9+/]{24,}")
+KEY_BODY_LOOKAHEAD_LINES = 2
+# What can sit between a header and its body in source code: an escaped or
+# real line break, the end of one string literal and the start of the next.
+_KEY_GLUE = re.compile(r"""(?:\\[nr]|[\s"'+,;()])+""")
+
+
+def has_key_body(lines: list[str], index: int, header_end: int) -> bool:
+    """True when base64 follows the header at ``lines[index][header_end:]``."""
+    candidates = [lines[index][header_end:]]
+    candidates += lines[index + 1 : index + 1 + KEY_BODY_LOOKAHEAD_LINES]
+    for candidate in candidates:
+        rest = _KEY_GLUE.sub("", candidate, count=1) if _KEY_GLUE.match(candidate) else candidate
+        if KEY_BODY.match(rest):
+            return True
+        if rest.strip():
+            # Something else follows the header: code, not a key.
+            return False
+    return False
+
+
 # A regex describing credential-ish *names*, not a credential.
 SECRET_NAME_PATTERN = (
     r"\w*(?:password|passwd|secret|api[_-]?key|access[_-]?key|auth[_-]?token|token)\w*"  # noqa: S105
@@ -101,8 +128,12 @@ GENERIC_ASSIGNMENT = re.compile(
 # files, never for source code: in code, `token = getToken()` and
 # `password = other_variable` would both match, and the quoted rule already
 # covers the real case there.
+#
+# The name may be a dotted property key — `spring.datasource.password=…` is how
+# a Java application's database password is actually committed.
 ENV_ASSIGNMENT = re.compile(
-    rf"(?i)^\s*(?:export\s+)?({SECRET_NAME_PATTERN})\s*=\s*([^\s#\"']{{{MIN_SECRET_LENGTH},120}})\s*$"
+    rf"(?i)^\s*(?:export\s+)?((?:[\w-]+\.)*{SECRET_NAME_PATTERN})"
+    rf"\s*=\s*([^\s#\"']{{{MIN_SECRET_LENGTH},120}})\s*$"
 )
 
 # NAME=${NAME:-fallback} — a reference with a literal default. It reads like
@@ -128,6 +159,30 @@ def is_env_style(file_path: str) -> bool:
     return suffix in ENV_STYLE_SUFFIXES
 
 
+# Message bundles: `password=Wachtwoord` is the Dutch word for the label on a
+# login form, in a file whose whole purpose is to hold such words.
+I18N_SEGMENTS = frozenset({"i18n", "l10n", "locale", "locales", "lang", "langs", "translations"})
+I18N_BUNDLE_NAME = re.compile(r"(?i)^messages?(?:[_-][a-z]{2,3}(?:[_-][a-z]{2,4})?)?\.properties$")
+
+
+def is_message_bundle(file_path: str) -> bool:
+    parts = file_path.split("/")
+    return bool(I18N_SEGMENTS & {part.lower() for part in parts[:-1]}) or bool(
+        I18N_BUNDLE_NAME.match(parts[-1])
+    )
+
+
+def inside_string_literal(line: str, position: int) -> bool:
+    """True when ``position`` falls inside an open double-quoted string.
+
+    `out.append("Token: ").append(escape(token))` contains the text
+    ``Token: "`` — a name, a colon and a quote — but the quote is the *end* of
+    a string, and what follows it is code. An odd number of double quotes
+    before the name means the name is inside a literal.
+    """
+    return line.count('"', 0, position) % 2 == 1
+
+
 # Lines that are documenting the problem, not committing it.
 REFERENCE_VALUE = re.compile(
     r"(?i)^\s*(?:\$\{?[a-z_]|<[a-z_ ]+>|%\([a-z_]+\)|process\.env|os\.environ|env\.|\{\{)"
@@ -140,7 +195,9 @@ def analyze_secrets(source: str, file_path: str) -> list[Finding]:
 
 def _scan(source: str, file_path: str) -> Iterator[Finding]:
     env_style = is_env_style(file_path)
-    for index, raw_line in enumerate(source.splitlines(), start=1):
+    message_bundle = is_message_bundle(file_path)
+    lines = source.splitlines()
+    for index, raw_line in enumerate(lines, start=1):
         if not raw_line.strip():
             continue
 
@@ -152,6 +209,10 @@ def _scan(source: str, file_path: str) -> Iterator[Finding]:
             value = match.group(secret.value_group) if secret.value_group else match.group(0)
             if _is_placeholder(value):
                 continue
+            if secret.rule is SECRET_PRIVATE_KEY and not has_key_body(
+                lines, index - 1, match.end()
+            ):
+                continue
             matched_known = True
             yield _finding(secret.rule, file_path, index, raw_line, value)
 
@@ -160,6 +221,8 @@ def _scan(source: str, file_path: str) -> Iterator[Finding]:
 
         if raw_line.lstrip().startswith("#"):
             continue  # a commented-out line is documentation, not a live secret
+        if message_bundle:
+            continue  # known formats above still apply; the guess below does not
 
         # Checked first: `${NAME:-fallback}` would otherwise be read as a
         # reference to a variable and dismissed, which it only half is. Not
@@ -169,12 +232,19 @@ def _scan(source: str, file_path: str) -> Iterator[Finding]:
         generic = SHELL_DEFAULT_ASSIGNMENT.match(raw_line)
         if generic is None:
             generic = GENERIC_ASSIGNMENT.search(raw_line)
+            if generic and (
+                inside_string_literal(raw_line, generic.start(1))
+                or is_not_a_credential(generic.group(1), generic.group(2))
+            ):
+                generic = None
         if generic is None and env_style:
             generic = ENV_ASSIGNMENT.match(raw_line)
         if generic:
             name, value = generic.group(1), generic.group(2)
             if _is_placeholder(value) or REFERENCE_VALUE.match(value):
                 continue
+            if describes_a_credential(name):
+                continue  # TOKEN_URL=…, PASSWORD_FIELD=…: about one, not one
             yield _finding(
                 SECRET_GENERIC,
                 file_path,

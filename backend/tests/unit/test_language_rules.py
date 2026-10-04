@@ -10,7 +10,7 @@ import pytest
 from app.analysis.patterns import analyze_with_patterns
 from app.analysis.secrets import analyze_secrets
 from tests.helpers import AWS_ACCESS_KEY_ID as AWS_KEY
-from tests.helpers import GITHUB_TOKEN, PRIVATE_KEY_HEADER
+from tests.helpers import GITHUB_TOKEN, PRIVATE_KEY_BODY, PRIVATE_KEY_HEADER
 
 
 def pattern_rules(source: str, suffix: str = ".js") -> set[str]:
@@ -160,7 +160,112 @@ def test_an_aws_key_is_reported_and_redacted() -> None:
 
 
 def test_a_private_key_block_is_reported() -> None:
-    assert "SEC002" in secret_rules(f"{PRIVATE_KEY_HEADER}\nMIIEpAIBAAKCA…\n")
+    assert "SEC002" in secret_rules(f"{PRIVATE_KEY_HEADER}\n{PRIVATE_KEY_BODY}\n")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # A key written out in source code, on one line and across several.
+        f'String key = "{PRIVATE_KEY_HEADER}\\n" + "{PRIVATE_KEY_BODY}";',
+        f'String key = "{PRIVATE_KEY_HEADER}\\n"\n    + "{PRIVATE_KEY_BODY}\\n"\n',
+        f'key = """{PRIVATE_KEY_HEADER}\n\n{PRIVATE_KEY_BODY}\n"""',
+        f'KEY="{PRIVATE_KEY_HEADER}\\n{PRIVATE_KEY_BODY}\\n"',
+    ],
+)
+def test_a_private_key_is_reported_however_it_is_written_down(source: str) -> None:
+    assert "SEC002" in {f.rule_id for f in analyze_secrets(source, "Keys.java")}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Code that handles keys, found in a real project: it strips the header
+        # from one, and builds one at runtime. Neither contains a key.
+        f'pem = pem.replace("{PRIVATE_KEY_HEADER}", "");\npem = pem.replace("x", "");',
+        f'String encoded = "{PRIVATE_KEY_HEADER}\\n";\nencoded = encoded + body;',
+        f"if (line.startsWith('{PRIVATE_KEY_HEADER}')) {{ continue; }}",
+        f"# A PEM file starts with {PRIVATE_KEY_HEADER} and ends with the matching footer.",
+        f"{PRIVATE_KEY_HEADER}\n",
+        f"{PRIVATE_KEY_HEADER}\n\n\n\n{PRIVATE_KEY_BODY}\n",
+        # Code between a header and something base64-shaped: not one block.
+        f'marker = "{PRIVATE_KEY_HEADER}";\nprepare();\n{PRIVATE_KEY_BODY}\n',
+    ],
+)
+def test_the_header_of_a_private_key_is_not_a_private_key(source: str) -> None:
+    assert "SEC002" not in {f.rule_id for f in analyze_secrets(source, "CryptoUtil.java")}
+
+
+def test_a_lexers_token_is_not_a_credential() -> None:
+    """Sixty of these in one syntax-highlighting library were most of a real
+    project's "credentials"."""
+    source = (
+        'token : "comment.doc",\n'
+        'defaultToken : "string.regexp"\n'
+        'token: "keyword.operator",\n'
+        "token = 'punctuation.operator'\n"
+        'token: "empty_line"\n'
+    )
+    assert analyze_secrets(source, "static/js/libs/mode-java.js") == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'token = "a8f3k2m9x7q1w5z0"',  # a digit: random, not a word
+        'authToken = "QwErTyUiOpAsDfGh"',  # mixed case
+        'token: "Bearer abcdefgh"',
+        # Names that say what they are keep their plain-word values: a weak
+        # password is still a hard-coded password.
+        'password = "correcthorse"',
+        'api_key = "abcdefghijkl"',
+        'client_secret = "keyword.operator"',
+        'token_secret = "lowercaseonly"',
+    ],
+)
+def test_a_real_token_or_a_named_credential_is_still_reported(line: str) -> None:
+    assert [f.rule_id for f in analyze_secrets(line, "app/config.js")] == ["SEC005"]
+
+
+def test_a_name_inside_a_string_is_not_an_assignment() -> None:
+    """`"Token: "` ends a string; what follows the quote is code."""
+    source = (
+        'debug.append("Token: ").append(escape(token)).append("\\n");\n'
+        'log.info("password: " + masked + " accepted");\n'
+    )
+    assert analyze_secrets(source, "Task.java") == []
+
+
+def test_an_assignment_after_a_closed_string_is_still_reported() -> None:
+    line = 'connect("db", password="s3cr3t_value_42")'
+    assert [f.rule_id for f in analyze_secrets(line, "app/db.py")] == ["SEC005"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/main/resources/i18n/messages_nl.properties",
+        "src/main/resources/messages.properties",
+        "src/main/resources/messages_pt_BR.properties",
+        "web/locales/de/login.properties",
+        "app/translations/form.ini",
+    ],
+)
+def test_a_translation_of_the_word_password_is_not_a_password(path: str) -> None:
+    assert analyze_secrets("password=Wachtwoord\nsecret=Geheimnis!\n", path) == []
+
+
+def test_a_real_key_in_a_message_bundle_is_still_found() -> None:
+    source = f"help=contact us\ngithub.token={GITHUB_TOKEN}\n"
+    found = analyze_secrets(source, "src/main/resources/i18n/messages_en.properties")
+    assert [f.rule_id for f in found] == ["SEC003"]
+
+
+@pytest.mark.parametrize(
+    "path", ["config/application.properties", "src/main/resources/db.properties", "lang.ini"]
+)
+def test_an_ordinary_properties_file_is_still_scanned(path: str) -> None:
+    assert [f.rule_id for f in analyze_secrets("db.password=Wachtwoord1\n", path)] == ["SEC005"]
 
 
 def test_a_github_token_is_reported_and_redacted() -> None:
@@ -336,3 +441,42 @@ def test_a_shell_default_is_a_credential_wherever_it_is_written(file_path: str) 
     findings = analyze_secrets("API_TOKEN=${API_TOKEN:-dev-token-12345}", file_path)
 
     assert [finding.rule_id for finding in findings] == ["SEC005"]
+
+
+def test_a_dotted_property_key_is_still_a_credential_name() -> None:
+    """`spring.datasource.password=…` is how a Java application's database
+    password is actually committed, and the name did not match."""
+    source = "spring.datasource.username=app\nspring.datasource.password=s3cr3t_value_42\n"
+    found = analyze_secrets(source, "src/main/resources/application.properties")
+
+    assert [(f.rule_id, f.line_start) for f in found] == [("SEC005", 2)]
+    assert "s3cr3t_value_42" not in found[0].snippet
+    assert found[0].snippet.startswith("spring.datasource.password = ")
+
+
+def test_a_dotted_key_that_refers_to_the_environment_is_not_reported() -> None:
+    source = "spring.datasource.password=${DB_PASSWORD}\njwt.secret=${JWT_SECRET:}\n"
+    assert analyze_secrets(source, "application.properties") == []
+
+
+def test_a_minified_line_is_not_read_as_one_statement() -> None:
+    """Six "SQL injections" in a real project were the word `select` and a `+`
+    thirty thousand characters apart in minified jQuery."""
+    filler = "a=b(c);" * 400
+    minified = f'{filler}x.innerHTML+="<select class=\'y\'>";{filler}q="delete from"+n;eval(z);'
+
+    assert len(minified) > 1000
+    assert analyze_with_patterns(minified, "static/js/jquery.min.js", ".js") == []
+
+
+def test_an_ordinary_long_line_is_still_read() -> None:
+    line = f'const query = "SELECT * FROM users WHERE name = " + name; // {"x" * 700}'
+
+    assert len(line) < 1000
+    assert [f.rule_id for f in analyze_with_patterns(line, "app/db.js", ".js")] == ["SQL001"]
+
+
+def test_a_secret_on_a_minified_line_is_still_found() -> None:
+    line = f'{"a=b(c);" * 400}var t="{GITHUB_TOKEN}";'
+
+    assert [f.rule_id for f in analyze_secrets(line, "static/app.min.js")] == ["SEC003"]

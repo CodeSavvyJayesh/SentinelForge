@@ -44,7 +44,14 @@ SECURITY_SEVERITY = {
 }
 
 
-def render(report: Report) -> dict[str, Any]:
+def render(report: Report, *, baseline: frozenset[str] | None = None) -> dict[str, Any]:
+    """The report as a SARIF log.
+
+    ``baseline`` is the set of fingerprints an earlier run reported. When it is
+    given, every result says whether it is ``new`` or ``unchanged`` since then,
+    which is what lets a consumer — or a build — react to what a change
+    introduced rather than to everything that was already there.
+    """
     rules: list[dict[str, Any]] = []
     index_of: dict[str, int] = {}
     for rule in report.rules:
@@ -98,6 +105,13 @@ def render(report: Report) -> dict[str, Any]:
                 # Stable across scans, so a consumer can tell "still there"
                 # from "new" without comparing line numbers.
                 "partialFingerprints": {FINGERPRINT_KEY: finding.fingerprint},
+                **(
+                    {}
+                    if baseline is None
+                    else {
+                        "baselineState": ("unchanged" if finding.fingerprint in baseline else "new")
+                    }
+                ),
                 "properties": {
                     "severity": finding.severity,
                     "confidence": finding.confidence,
@@ -125,7 +139,9 @@ def render(report: Report) -> dict[str, Any]:
             "truncated": report.scan.truncated,
         },
     }
-    if report.commit_hash:
+    # Only for a repository with an address: `repositoryUri` has to be one, and
+    # a scan of a local folder knows its name, not where it lives.
+    if report.commit_hash and "://" in report.origin:
         run["versionControlProvenance"] = [
             {"repositoryUri": report.origin, "revisionId": report.commit_hash}
             | ({"branch": report.branch} if report.branch else {})
