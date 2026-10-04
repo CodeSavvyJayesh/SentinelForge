@@ -22,6 +22,8 @@ frontend/coverage/
 # IDE
 .idea/
 .vscode/
+# ...except the one file that lets F5 start the extension.
+!vscode-extension/.vscode/
 
 # OS
 .DS_Store
