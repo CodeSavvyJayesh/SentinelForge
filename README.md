@@ -260,9 +260,9 @@ See [running with Docker](docs/devsecops/docker.md).
   be without running them — the compose file is validated and the scan step was run exactly as
   written on a clean copy — but **no image was built and no workflow run happened** before
   they were committed. Their first real run is the test.
-- The VS Code extension was tested against a stand-in for the editor's API and against the real
-  scanner, but **it has not been run inside VS Code** by its author. It scans on request or on
-  save, not as you type, and it underlines whole lines.
+- The VS Code extension scans on request or on save, not as you type, and it underlines whole
+  lines. It is run from its folder (`F5`) rather than installed: packaging it as a `.vsix` has
+  not been done.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.

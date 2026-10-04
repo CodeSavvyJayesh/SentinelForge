@@ -133,18 +133,30 @@ The ignore rule now has an exception for `vscode-extension/.vscode/`. The
 README also gives a way to start the extension that needs no configuration file
 at all, which is the more robust instruction anyway.
 
+## Run in VS Code, on Windows
+
+After the launch configuration was fixed, the extension was started with `F5`
+on the development machine (Windows, VS Code with an Extension Development
+Host) and used on two folders:
+
+- a React project with nothing to find: the status bar read
+  `SentinelForge A · 0`;
+- the same folder with a three-line vulnerable Python file added: the status
+  bar read `SentinelForge D · 3`, the Problems counter read 2 errors and
+  1 warning, and lines 6, 7 and 8 were underlined — two in red, one in yellow —
+  each with its title, its reason and its fix.
+
+That is the editor doing what the stand-in assumed it would, for the main path:
+activation, the status bar, running the scanner through a Windows virtual
+environment, and placing diagnostics. The **Open report** command, scan on
+save, multi-root workspaces and the failure messages were not exercised by
+hand; they rest on the tests.
+
 ## Not verified
 
-- **The extension has never been run inside VS Code.** Not once. Everything
-  above is evidence that the logic is right and that the scanner integration
-  works; none of it is evidence that the squiggles appear. The first `F5` is
-  the test.
 - **`vsce package` was not run.** Packaging needs the npm registry, which is
   not reachable here. The manifest has no `LICENSE` file beside it, which
   `vsce` warns about.
-- **It was not tried on Windows.** The tests use the platform's own path
-  handling throughout, and the scanner integration is the same command Phase 14
-  tested there, but the editor side is unexercised on any platform.
 - **JavaScript type-checking was not run** on the extension. There is no
   TypeScript and no linter for this folder.
 
