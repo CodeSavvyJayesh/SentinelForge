@@ -15,14 +15,15 @@ import argparse
 import json
 import os
 import sys
-import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
 from app.cli import baseline as baseline_file
+from app.cli import evaluate as evaluate_command
 from app.cli.gate import DEFAULT_FAIL_ON, FAIL_ON_CHOICES, MAX_LISTED, Gate, GateResult, evaluate
 from app.cli.scan import ScanOptions, ScanOutcome, scan
+from app.cli.text import plain
 from app.reports import html as html_report
 from app.reports import markdown as markdown_report
 from app.reports import sarif as sarif_report
@@ -32,22 +33,6 @@ from app.schemas.report import ReportRead
 EXIT_PASSED = 0
 EXIT_GATE_FAILED = 1
 EXIT_ERROR = 2
-
-
-def plain(value: object) -> str:
-    """Text from a scanned repository, made safe to print.
-
-    A file can be *named* with an escape sequence in it, and a terminal will
-    obey one: move the cursor, recolour the screen, rewrite the line above. A
-    build log has a second problem — a line that begins with ``::`` is a
-    command to the GitHub Actions runner. So every control and formatting
-    character, including the line breaks that would let text start a line of
-    its own, is replaced before anything is written.
-    """
-    return "".join(
-        "?" if unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"} else character
-        for character in str(value)
-    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -112,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan_command.add_argument(
         "--quiet", action="store_true", help="print the verdict only, not each finding"
     )
+    evaluate_command.add_parser(commands)
     return parser
 
 
@@ -136,6 +122,9 @@ def main(
     except SystemExit as exit_:
         # argparse exits 2 for a bad argument and 0 for --help; both are kept.
         return int(exit_.code or 0)
+
+    if arguments.command == "evaluate":
+        return evaluate_command.run(arguments, out, err)
 
     root = arguments.path
     if not root.is_dir():
