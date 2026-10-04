@@ -335,7 +335,10 @@ def test_the_trend_is_what_each_scan_recorded_oldest_first(
 
     assert [point["score"] for point in listed["trend"]] == [70.0, 10.0]
     assert [point["grade"] for point in listed["trend"]] == ["D", "A"]
-    assert listed["last_scan_at"].startswith("2026-03-01T12:00:00")
+    # Compared as an instant, not as text: the database hands a timestamp back
+    # in its session's time zone, so the same moment is "12:00+00:00" on one
+    # machine and "17:30+05:30" on another.
+    assert datetime.fromisoformat(listed["last_scan_at"]) == NOW
     assert body["totals"]["scans_completed"] == 3
 
 

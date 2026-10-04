@@ -143,12 +143,27 @@ The first screenshot showed weakness labels cut off beside a wide, mostly empty
 bar. No check had caught it. Long labels now sit on their own line above the
 bar.
 
+## What the development machine found
+
+One test failed on the development machine and nowhere else. It asserted that a
+timestamp in the response *started with* `2026-03-01T12:00:00`. PostgreSQL
+returns a timestamp in its session's time zone, so on a machine in India the
+same instant arrives as `2026-03-01T17:30:00+05:30`. The API was right; the test
+was comparing text where it meant to compare a moment. It now parses the value
+and compares instants.
+
+The build environment runs in UTC, which is why nothing there could see it. The
+suite is now also run with the database session in `Asia/Kolkata`
+(`PGTZ=Asia/Kolkata pytest`), alongside the Windows line-ending run that Phase
+11 added for the same kind of reason.
+
 ## Verification
 
 | Check | Result |
 | --- | --- |
 | Backend tests | 799 passed |
 | Backend tests with Windows line endings simulated | 799 passed |
+| Backend tests with the database in `Asia/Kolkata` | 799 passed |
 | Ruff lint and format | clean |
 | `alembic check` | no schema change |
 | Frontend type-check (strict) | clean |
