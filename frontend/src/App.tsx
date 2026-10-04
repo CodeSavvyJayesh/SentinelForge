@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthProvider'
 import { useAuth } from './hooks/useAuth'
 import { AppLayout } from './layouts/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { ProjectCreatePage } from './pages/ProjectCreatePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -53,6 +54,7 @@ function AuthenticatedApp() {
             bar; without these the user would land on "Page not found". */}
         <Route path="/login" element={<Navigate to="/projects" replace />} />
         <Route path="/register" element={<Navigate to="/projects" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/new" element={<ProjectCreatePage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />

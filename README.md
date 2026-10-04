@@ -2,11 +2,11 @@
 
 **AI-powered DevSecOps platform for vulnerability detection, risk analysis, explanation, automated repair and patch validation.**
 
-> Status: **Phase 11 — Patch validation** complete (foundation, accounts, projects, ingestion,
+> Status: **Phase 12 — Dashboard** complete (foundation, accounts, projects, ingestion,
 > detection, background scans with history, locally-indexed CWE/OWASP knowledge, per-finding
 > explanations from a local model with every citation verified, a deterministic risk score
-> that shows its working, proposed fixes as reviewable diffs, and a re-scan of every proposal
-> on a throwaway copy).
+> that shows its working, proposed fixes as reviewable diffs, a re-scan of every proposal
+> on a throwaway copy, and a dashboard across everything you have scanned).
 > A proposed fix is still a **suggestion**: nothing is applied to your files. "Checked by
 > re-scan" means the finding is no longer detected, nothing new is, and the change is not a
 > deletion — not that the program still behaves the same. Nothing in the UI is simulated.
@@ -166,7 +166,8 @@ SentinelForge/
 | 9 | Risk engine | ✅ Done |
 | 10 | Patch generation (proposed diffs) | ✅ Done |
 | 11 | Patch validation (apply to a copy, re-scan) | ✅ Done |
-| 12–13 | Dashboard & reports | Planned |
+| 12 | Dashboard across projects | ✅ Done |
+| 13 | Reports | Planned |
 | 14–16 | DevSecOps integration, VS Code, research evaluation | Planned |
 
 ## Limitations (current)
@@ -208,6 +209,10 @@ SentinelForge/
   not CVSS and does not map onto CVSS.
 - Risk cannot account for reachability — without taint analysis there is no way to know whether
   user input reaches a dangerous call, so the score uses the file path as a heuristic and says so.
+- The dashboard counts what is in the database when it is opened. It reads every finding you
+  own on each request and scores them in memory, which is exact and fast for thousands of
+  findings and would need to become SQL aggregation, or a cache, for hundreds of thousands. It
+  has no date filter, and its only trend is each repository's score per scan.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -237,3 +242,4 @@ SentinelForge/
 - [Phase 9 report](docs/development/phases/phase-09-risk.md)
 - [Phase 10 report](docs/development/phases/phase-10-patches.md)
 - [Phase 11 report](docs/development/phases/phase-11-validation.md)
+- [Phase 12 report](docs/development/phases/phase-12-dashboard.md)

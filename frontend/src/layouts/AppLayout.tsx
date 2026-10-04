@@ -37,6 +37,11 @@ export function AppLayout({ children }: AppLayoutProps) {
         <nav aria-label="Primary">
           <ul className="nav">
             <li>
+              <NavLink className="nav__link" to="/dashboard">
+                Dashboard
+              </NavLink>
+            </li>
+            <li>
               <NavLink className="nav__link" to="/projects">
                 Projects
               </NavLink>

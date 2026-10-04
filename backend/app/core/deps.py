@@ -25,6 +25,7 @@ from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.analysis_service import AnalysisService
 from app.services.auth_service import AuthService, RequestContext
+from app.services.dashboard_service import DashboardService
 from app.services.explanation_service import ExplanationService
 from app.services.knowledge_service import KnowledgeService
 from app.services.patch_service import PatchService
@@ -106,6 +107,13 @@ def get_risk_service(db: DbSession, settings: AppSettings) -> RiskService:
 
 
 RiskServiceDep = Annotated[RiskService, Depends(get_risk_service)]
+
+
+def get_dashboard_service(db: DbSession) -> DashboardService:
+    return DashboardService(db)
+
+
+DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 
 
 class _EmbedderHolder:

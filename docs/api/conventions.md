@@ -239,6 +239,56 @@ History omits scans that carry no score rather than sending zero — they ran
 before this scoring existed, and a zero would draw an improvement that never
 happened.
 
+## Dashboard
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /api/v1/dashboard` | Bearer | everything the caller owns, across all projects |
+
+It takes no parameters. There is no project or repository id to pass, so there
+is nothing a caller could change to reach somebody else's data: the only input
+is the access token.
+
+```json
+{"generated_at": "2026-10-04T09:00:00Z", "policy_version": 1,
+ "totals": {"projects": 2, "repositories": 3, "repositories_scanned": 2,
+            "scans_completed": 5, "open_findings": 12, "fixed_findings": 4},
+ "open_by_severity": {"CRITICAL": 2, "HIGH": 8, "MEDIUM": 2, "LOW": 0, "INFO": 0},
+ "repositories": [
+   {"repository_id": 7, "project_id": 1, "project_name": "payments", "origin": "payments.zip",
+    "score": 61.2, "grade": "D", "open_findings": 10, "fixed_findings": 4,
+    "counts_by_severity": {"CRITICAL": 2, "HIGH": 6, "MEDIUM": 2, "LOW": 0, "INFO": 0},
+    "last_scan_at": "2026-10-03T10:00:00Z",
+    "trend": [{"scan_id": 1, "score": 70.0, "grade": "D", "total_findings": 14,
+               "finished_at": "2026-10-01T10:00:00Z"}]},
+   {"repository_id": 9, "project_id": 2, "project_name": "website", "origin": "site.zip",
+    "score": null, "grade": null, "open_findings": 0, "fixed_findings": 0,
+    "counts_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0},
+    "last_scan_at": null, "trend": []}
+ ],
+ "top_findings": [], "weaknesses": [],
+ "fixes": {"requested": 10, "generating": 1, "refused": 2, "proposed": 7,
+           "passed": 3, "rejected": 1, "not_judged": 1, "checking": 1, "unchecked": 1,
+           "labelled": 4}}
+```
+
+Things a client can rely on:
+
+- **`score` and `grade` are `null` for a repository with no completed scan.**
+  Never scanned is not the same as clean, and a client must not draw it as zero.
+- **Every list arrives in display order.** Repositories are worst first with
+  unscanned ones last; `top_findings` is by risk score across all repositories;
+  `weaknesses` is by count; each `trend` is oldest first.
+- **Every severity is always present**, as zero if need be, in `open_by_severity`
+  and in each repository's `counts_by_severity`.
+- **`score` is computed at request time; `trend` is what each scan recorded.**
+  The same split as the risk endpoints, and for the same reason.
+- **`fixes` counts patches, not validations**, each by its latest check:
+  `requested = generating + refused + proposed` and
+  `proposed = passed + rejected + not_judged + checking + unchecked`.
+  `labelled` is `passed + rejected`. `not_judged` is never part of it — a check
+  that could not run says nothing about the change.
+
 ## Explanations
 
 | Endpoint | Auth | Notes |

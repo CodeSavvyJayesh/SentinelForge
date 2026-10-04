@@ -1765,3 +1765,308 @@ a.button {
   display: grid;
   gap: var(--space-1);
 }
+
+/* ---------- Dashboard (Phase 12) ---------- */
+
+.dashboard {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* A refresh keeps the previous numbers on screen, dimmed, instead of swapping
+   the page for a spinner and back. */
+.dashboard--refreshing {
+  opacity: 0.6;
+}
+
+.dashboard__columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.dashboard__panel {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  /* Grid children default to min-width:auto, which lets a wide table push the
+     whole page sideways. */
+  min-width: 0;
+}
+
+.dashboard__heading {
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.dashboard__empty,
+.dashboard__lede {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.dashboard__lede {
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+}
+
+.dashboard__note {
+  margin: var(--space-3) 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.dashboard__note strong {
+  color: var(--color-text);
+}
+
+/* Headline numbers. The first is the one the page leads with. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.tile {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.tile__label {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.tile__value {
+  margin: 2px 0 0;
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1.15;
+}
+
+.tile--hero .tile__value {
+  font-size: 3rem;
+}
+
+.tile__note {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 900px) {
+  .tiles {
+    grid-template-columns: 1.6fr repeat(4, 1fr);
+  }
+}
+
+/* Bar list: label, bar, number. One colour for every bar — the label says
+   which row it is, the bar only says how big. */
+.bar-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(40px, 1fr) minmax(2.5rem, auto);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 2px 0;
+  border-radius: var(--radius-sm);
+}
+
+.bar-list__row:hover {
+  background: var(--color-surface-raised);
+}
+
+.bar-list__label {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-list__track {
+  display: block;
+  height: 8px;
+  /* A hairline where the bars start, so a row of zero still has a baseline. */
+  border-left: 1px solid var(--color-border);
+}
+
+.bar-list__bar {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  /* Rounded at the end that carries the value, square at the baseline. */
+  border-radius: 0 4px 4px 0;
+}
+
+.bar-list__value {
+  text-align: right;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Repository table */
+.dash-table__scroll {
+  overflow-x: auto;
+}
+
+.dash-table {
+  margin-top: 0;
+}
+
+.dash-table tbody th {
+  font-weight: 400;
+}
+
+.dash-table__name a {
+  display: block;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dash-table__project,
+.dash-table__muted {
+  color: var(--color-text-muted);
+}
+
+.dash-table__project {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.scan-table th.dash-table__number,
+.scan-table td.dash-table__number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-grade {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dash-grade__letter {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.dash-grade__score {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One bar per scan on a fixed 0–100 scale, so rows can be compared. */
+.spark {
+  display: inline-flex;
+  align-items: flex-end;
+  height: 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.spark__slot {
+  display: flex;
+  align-items: flex-end;
+  width: 10px;
+  height: 100%;
+  /* The gap between bars is part of each bar's hover target. */
+  padding: 0 1px;
+}
+
+.spark__bar {
+  display: block;
+  width: 100%;
+  background: var(--color-text-muted);
+  border-radius: 2px 2px 0 0;
+}
+
+.spark__slot:last-child .spark__bar,
+.spark__slot:hover .spark__bar {
+  background: var(--color-accent);
+}
+
+/* Highest-risk findings */
+.dash-findings {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dash-finding {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dash-finding:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.dash-finding__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dash-finding__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dash-finding__score {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-finding__where,
+.dash-finding__sum {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Long labels (a CWE and its title, a sentence about an outcome) get a line
+   of their own above the bar instead of being cut off beside it. */
+.bar-list--stacked .bar-list__row {
+  grid-template-columns: minmax(40px, 1fr) minmax(2.5rem, auto);
+  row-gap: 2px;
+}
+
+.bar-list--stacked .bar-list__label {
+  grid-column: 1 / -1;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .bar-list__row {
+    grid-template-columns: minmax(0, 5.5rem) minmax(40px, 1fr) minmax(2rem, auto);
+  }
+
+  .bar-list--stacked .bar-list__row {
+    grid-template-columns: minmax(40px, 1fr) minmax(2rem, auto);
+  }
+}
