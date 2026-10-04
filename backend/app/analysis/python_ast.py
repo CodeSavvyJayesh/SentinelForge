@@ -15,6 +15,7 @@ analysis of hostile code is safe to run in-process.
 import ast
 from dataclasses import dataclass
 
+from app.analysis.credential_names import is_not_a_credential
 from app.analysis.findings import Confidence, Finding, Severity, clean_snippet
 from app.analysis.rules import (
     PY_EVAL_EXEC,
@@ -283,6 +284,8 @@ class _Visitor(ast.NodeVisitor):
             if not name or not any(word in name.lower() for word in SECRET_NAMES):
                 continue
             if _looks_like_reference(value):
+                continue
+            if is_not_a_credential(name, value):
                 continue
             # The secret itself is never stored: the finding says where it is,
             # not what it is. A report is read by more people than the code.

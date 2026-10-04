@@ -167,6 +167,15 @@ PATTERN_RULES: tuple[PatternRule, ...] = (
 )
 
 
+# A pattern here is written to recognise one statement on one line. Minified
+# code puts a whole library on one line, and against thirty thousand characters
+# almost every pattern matches something: the word "select" in one place and a
+# "+" somewhere after it is not a SQL query. Past this length a line is not one
+# statement, so these rules have nothing to say about it. (Secret detection is
+# separate and still reads every line: a key in a bundle is still a key.)
+MAX_STATEMENT_LENGTH = 1000
+
+
 def analyze_with_patterns(source: str, file_path: str, suffix: str) -> list[Finding]:
     findings: list[Finding] = []
     lines = source.splitlines()
@@ -179,6 +188,8 @@ def analyze_with_patterns(source: str, file_path: str, suffix: str) -> list[Find
 
 def _scan(rule: PatternRule, lines: list[str], file_path: str) -> Iterator[Finding]:
     for index, raw_line in enumerate(lines, start=1):
+        if len(raw_line) > MAX_STATEMENT_LENGTH:
+            continue
         line = LINE_COMMENT.sub("", raw_line)
         if not line.strip():
             continue
