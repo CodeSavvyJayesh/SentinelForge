@@ -219,3 +219,14 @@ def test_a_huge_nested_literal_does_not_crash_the_run(tmp_path: Path, settings: 
     result = analyze_workspace(tmp_path, settings)
 
     assert "PY003" in {finding.rule_id for finding in result.findings}
+
+
+def test_files_that_do_not_parse_are_named_as_well_as_counted(tmp_path: Path) -> None:
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "broken.py").write_bytes(b"def broken(:\n")
+    (tmp_path / "fine.py").write_bytes(b"x = 1\n")
+
+    result = analyze_workspace(tmp_path, get_settings())
+
+    assert result.unparsable_files == 1
+    assert result.unparsable_paths == ["pkg/broken.py"]

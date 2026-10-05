@@ -1,0 +1,572 @@
+{
+  "schema": 1,
+  "benchmark": {
+    "name": "OWASP Benchmark for Python",
+    "version": "0.1",
+    "commit": "f1291485808b66e20ddb6b01b10dc71b3df8c8ba",
+    "answer_key_sha256": "6396f37c97cfd0c018db3d8750095ce6c678a083f83620cfb3e88fe27a46bb0c",
+    "split": "held-out",
+    "test_cases": 622
+  },
+  "analyser": {
+    "version": "0.1.0",
+    "sha256": "79a0731a2106c72462c48b27c7086dc3009682eef2a271440f4d127fafb7e504",
+    "python": "3.13"
+  },
+  "files_analysed": 2535,
+  "overall": {
+    "all_categories": {
+      "categories": 14,
+      "pooled": {
+        "tp": 202,
+        "fp": 3,
+        "tn": 399,
+        "fn": 18,
+        "recall": 0.9182,
+        "recall_interval": [
+          0.8744,
+          0.9476
+        ],
+        "false_positive_rate": 0.0075,
+        "false_positive_rate_interval": [
+          0.0025,
+          0.0217
+        ],
+        "precision": 0.9854,
+        "precision_interval": [
+          0.9579,
+          0.995
+        ],
+        "f1": 0.9506,
+        "accuracy": 0.9662,
+        "score": 0.9107,
+        "score_interval": [
+          0.8647,
+          0.9406
+        ]
+      },
+      "category_average": {
+        "recall": 0.9056,
+        "false_positive_rate": 0.0254,
+        "score": 0.8802
+      }
+    },
+    "categories_with_a_rule": {
+      "categories": 14,
+      "pooled": {
+        "tp": 202,
+        "fp": 3,
+        "tn": 399,
+        "fn": 18,
+        "recall": 0.9182,
+        "recall_interval": [
+          0.8744,
+          0.9476
+        ],
+        "false_positive_rate": 0.0075,
+        "false_positive_rate_interval": [
+          0.0025,
+          0.0217
+        ],
+        "precision": 0.9854,
+        "precision_interval": [
+          0.9579,
+          0.995
+        ],
+        "f1": 0.9506,
+        "accuracy": 0.9662,
+        "score": 0.9107,
+        "score_interval": [
+          0.8647,
+          0.9406
+        ]
+      },
+      "category_average": {
+        "recall": 0.9056,
+        "false_positive_rate": 0.0254,
+        "score": 0.8802
+      }
+    }
+  },
+  "categories": [
+    {
+      "category": "cmdi",
+      "cwe": 78,
+      "rules": [
+        "PY002",
+        "PY003",
+        "PY016"
+      ],
+      "tp": 4,
+      "fp": 1,
+      "tn": 3,
+      "fn": 2,
+      "recall": 0.6667,
+      "recall_interval": [
+        0.3,
+        0.9032
+      ],
+      "false_positive_rate": 0.25,
+      "false_positive_rate_interval": [
+        0.0456,
+        0.6994
+      ],
+      "precision": 0.8,
+      "precision_interval": [
+        0.3755,
+        0.9638
+      ],
+      "f1": 0.7273,
+      "accuracy": 0.7,
+      "score": 0.4167,
+      "score_interval": [
+        -0.1633,
+        0.7293
+      ]
+    },
+    {
+      "category": "codeinj",
+      "cwe": 94,
+      "rules": [
+        "PY001"
+      ],
+      "tp": 10,
+      "fp": 0,
+      "tn": 17,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.7225,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.1843
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.7225,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.6668,
+        1.0
+      ]
+    },
+    {
+      "category": "deserialization",
+      "cwe": 502,
+      "rules": [
+        "PY004",
+        "PY005"
+      ],
+      "tp": 8,
+      "fp": 2,
+      "tn": 17,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.6756,
+        1.0
+      ],
+      "false_positive_rate": 0.1053,
+      "false_positive_rate_interval": [
+        0.0294,
+        0.3139
+      ],
+      "precision": 0.8,
+      "precision_interval": [
+        0.4902,
+        0.9433
+      ],
+      "f1": 0.8889,
+      "accuracy": 0.9259,
+      "score": 0.8947,
+      "score_interval": [
+        0.509,
+        0.9706
+      ]
+    },
+    {
+      "category": "hash",
+      "cwe": 328,
+      "rules": [
+        "PY007"
+      ],
+      "tp": 28,
+      "fp": 0,
+      "tn": 44,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.8794,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0803
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.8794,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.8551,
+        1.0
+      ]
+    },
+    {
+      "category": "ldapi",
+      "cwe": 90,
+      "rules": [
+        "PY019"
+      ],
+      "tp": 7,
+      "fp": 0,
+      "tn": 8,
+      "fn": 1,
+      "recall": 0.875,
+      "recall_interval": [
+        0.5291,
+        0.9776
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.3244
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.6457,
+        1.0
+      ],
+      "f1": 0.9333,
+      "accuracy": 0.9375,
+      "score": 0.875,
+      "score_interval": [
+        0.4008,
+        0.9776
+      ]
+    },
+    {
+      "category": "pathtraver",
+      "cwe": 22,
+      "rules": [
+        "PY017"
+      ],
+      "tp": 28,
+      "fp": 0,
+      "tn": 39,
+      "fn": 2,
+      "recall": 0.9333,
+      "recall_interval": [
+        0.7868,
+        0.9815
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0897
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.8794,
+        1.0
+      ],
+      "f1": 0.9655,
+      "accuracy": 0.971,
+      "score": 0.9333,
+      "score_interval": [
+        0.7615,
+        0.9815
+      ]
+    },
+    {
+      "category": "redirect",
+      "cwe": 601,
+      "rules": [
+        "PY020"
+      ],
+      "tp": 7,
+      "fp": 0,
+      "tn": 12,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.6457,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2425
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.6457,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.5706,
+        1.0
+      ]
+    },
+    {
+      "category": "securecookie",
+      "cwe": 614,
+      "rules": [
+        "PY023"
+      ],
+      "tp": 12,
+      "fp": 0,
+      "tn": 6,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.7575,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.3903
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.7575,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.5405,
+        1.0
+      ]
+    },
+    {
+      "category": "sqli",
+      "cwe": 89,
+      "rules": [
+        "PY010"
+      ],
+      "tp": 4,
+      "fp": 0,
+      "tn": 8,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.5101,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.3244
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.5101,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.4124,
+        1.0
+      ]
+    },
+    {
+      "category": "trustbound",
+      "cwe": 501,
+      "rules": [
+        "PY022"
+      ],
+      "tp": 6,
+      "fp": 0,
+      "tn": 9,
+      "fn": 5,
+      "recall": 0.5455,
+      "recall_interval": [
+        0.2801,
+        0.7873
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2991
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.6097,
+        1.0
+      ],
+      "f1": 0.7059,
+      "accuracy": 0.75,
+      "score": 0.5455,
+      "score_interval": [
+        0.1456,
+        0.7873
+      ]
+    },
+    {
+      "category": "weakrand",
+      "cwe": 330,
+      "rules": [
+        "PY011"
+      ],
+      "tp": 49,
+      "fp": 0,
+      "tn": 127,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.9273,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0294
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.9273,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.9216,
+        1.0
+      ]
+    },
+    {
+      "category": "xpathi",
+      "cwe": 643,
+      "rules": [
+        "PY018"
+      ],
+      "tp": 20,
+      "fp": 0,
+      "tn": 69,
+      "fn": 6,
+      "recall": 0.7692,
+      "recall_interval": [
+        0.5795,
+        0.8897
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0527
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.8389,
+        1.0
+      ],
+      "f1": 0.8696,
+      "accuracy": 0.9368,
+      "score": 0.7692,
+      "score_interval": [
+        0.5723,
+        0.8897
+      ]
+    },
+    {
+      "category": "xss",
+      "cwe": 79,
+      "rules": [
+        "PY021"
+      ],
+      "tp": 16,
+      "fp": 0,
+      "tn": 26,
+      "fn": 2,
+      "recall": 0.8889,
+      "recall_interval": [
+        0.672,
+        0.969
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.1287
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.8064,
+        1.0
+      ],
+      "f1": 0.9412,
+      "accuracy": 0.9545,
+      "score": 0.8889,
+      "score_interval": [
+        0.6367,
+        0.969
+      ]
+    },
+    {
+      "category": "xxe",
+      "cwe": 611,
+      "rules": [
+        "PY015"
+      ],
+      "tp": 3,
+      "fp": 0,
+      "tn": 14,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.4385,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2153
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.4385,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.3986,
+        1.0
+      ]
+    }
+  ],
+  "unscored_findings": {
+    "in_test_cases_by_rule": {
+      "PY015": 27,
+      "PY021": 13
+    },
+    "outside_test_cases": 1
+  },
+  "outcomes_sha256": "a55fdaa2b87d74c50fcc7e68a7907591a58425c24a0c73e6179df9ba1813fd35",
+  "compared_with_earlier_run": {
+    "test_cases": 622,
+    "fixed": 178,
+    "broken": 0,
+    "mcnemar_p_value": 5.22e-54
+  }
+}

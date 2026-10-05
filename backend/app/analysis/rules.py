@@ -199,6 +199,96 @@ PY_XML_PARSE = _rule(
     "A05:2021 Security Misconfiguration",
 )
 
+PY_SHELL_COMMAND = _rule(
+    "PY016",
+    "Request data in a command given to a shell",
+    "The command is passed as a list, but the list starts a shell (sh -c, cmd /c) "
+    "or its first element is chosen by the caller, so the value is still parsed "
+    "as a command. Call the program directly with fixed arguments and validate "
+    "the value against a list of allowed ones.",
+    Severity.CRITICAL,
+    Confidence.HIGH,
+    "CWE-78",
+    "A03:2021 Injection",
+)
+PY_PATH_TRAVERSAL = _rule(
+    "PY017",
+    "Request data used as a file path",
+    "A value from the request decides which file is opened, so '../' or an "
+    "absolute path reaches files outside the intended folder. Resolve the path "
+    "and check it is still inside the base folder, or look the name up in a list "
+    "of allowed ones.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-22",
+    "A01:2021 Broken Access Control",
+)
+PY_XPATH_INJECTION = _rule(
+    "PY018",
+    "Request data in an XPath expression",
+    "A value joined into an XPath expression is parsed as XPath, so a quote in "
+    "it changes what the query selects. Pass it as an XPath variable "
+    "(root.xpath(query, name=value)) instead of building the expression.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-643",
+    "A03:2021 Injection",
+)
+PY_LDAP_INJECTION = _rule(
+    "PY019",
+    "Request data in an LDAP filter",
+    "A value joined into an LDAP filter is parsed as part of the filter, so "
+    "'*' or ')(' in it changes who the query matches. Escape it with "
+    "escape_filter_chars() before building the filter.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-90",
+    "A03:2021 Injection",
+)
+PY_OPEN_REDIRECT = _rule(
+    "PY020",
+    "Redirect to an address taken from the request",
+    "The destination of the redirect comes from the request, so a link to this "
+    "site can send a visitor anywhere. Redirect only to paths of this site, or "
+    "check the host against a list of allowed ones.",
+    Severity.MEDIUM,
+    Confidence.HIGH,
+    "CWE-601",
+    "A01:2021 Broken Access Control",
+)
+PY_REFLECTED_XSS = _rule(
+    "PY021",
+    "Request data written into an HTML response",
+    "A value from the request is returned to the browser as part of the page "
+    "without being escaped, so a script tag in it runs in the visitor's session. "
+    "Escape it (html.escape, markupsafe.escape) or render it through a template.",
+    Severity.HIGH,
+    Confidence.MEDIUM,
+    "CWE-79",
+    "A03:2021 Injection",
+)
+PY_TRUST_BOUNDARY = _rule(
+    "PY022",
+    "Request data stored in the session without validation",
+    "The session is trusted by the code that reads it later. Storing a value "
+    "from the request there, unvalidated, lets a caller plant data that will be "
+    "treated as the server's own. Validate it before it is stored.",
+    Severity.MEDIUM,
+    Confidence.MEDIUM,
+    "CWE-501",
+    "A04:2021 Insecure Design",
+)
+PY_INSECURE_COOKIE = _rule(
+    "PY023",
+    "Cookie set with secure=False",
+    "Without the Secure attribute the browser also sends the cookie over plain "
+    "HTTP, where anyone on the path can read it. Set secure=True.",
+    Severity.MEDIUM,
+    Confidence.HIGH,
+    "CWE-614",
+    "A05:2021 Security Misconfiguration",
+)
+
 # --- Patterns (JavaScript/TypeScript, Java, PHP, Go, and anything textual) --
 
 JS_EVAL = _rule(
@@ -286,6 +376,37 @@ JAVA_WEAK_HASH = _rule(
     Confidence.MEDIUM,
     "CWE-327",
     "A02:2021 Cryptographic Failures",
+)
+JAVA_WEAK_CIPHER = _rule(
+    "JV004",
+    "Weak cipher (DES, 3DES, RC4, Blowfish or ECB mode)",
+    "DES and RC4 are broken and 3DES and Blowfish have a 64-bit block that leaks "
+    "under volume; ECB mode encrypts equal blocks to equal ciphertext whatever "
+    'the cipher. Use Cipher.getInstance("AES/GCM/NoPadding") with a fresh nonce.',
+    Severity.MEDIUM,
+    Confidence.HIGH,
+    "CWE-327",
+    "A02:2021 Cryptographic Failures",
+)
+JAVA_WEAK_RANDOM = _rule(
+    "JV005",
+    "java.util.Random or Math.random() used near a security value",
+    "Both are predictable: a few outputs are enough to work out the rest. For a "
+    "token, a key, a session or a cookie value use java.security.SecureRandom.",
+    Severity.MEDIUM,
+    Confidence.MEDIUM,
+    "CWE-338",
+    "A02:2021 Cryptographic Failures",
+)
+JAVA_INSECURE_COOKIE = _rule(
+    "JV006",
+    "Cookie created with setSecure(false)",
+    "Without the Secure attribute the browser also sends the cookie over plain "
+    "HTTP, where anyone on the path can read it. Call setSecure(true).",
+    Severity.MEDIUM,
+    Confidence.HIGH,
+    "CWE-614",
+    "A05:2021 Security Misconfiguration",
 )
 SQL_CONCATENATION = _rule(
     "SQL001",
@@ -383,6 +504,14 @@ ALL_RULES: tuple[Rule, ...] = (
     PY_JWT_UNVERIFIED,
     PY_UNVERIFIED_SSL_CONTEXT,
     PY_XML_PARSE,
+    PY_SHELL_COMMAND,
+    PY_PATH_TRAVERSAL,
+    PY_XPATH_INJECTION,
+    PY_LDAP_INJECTION,
+    PY_OPEN_REDIRECT,
+    PY_REFLECTED_XSS,
+    PY_TRUST_BOUNDARY,
+    PY_INSECURE_COOKIE,
     JS_EVAL,
     JS_CHILD_PROCESS,
     JS_INNER_HTML,
@@ -392,6 +521,9 @@ ALL_RULES: tuple[Rule, ...] = (
     JAVA_RUNTIME_EXEC,
     JAVA_DESERIALIZE,
     JAVA_WEAK_HASH,
+    JAVA_WEAK_CIPHER,
+    JAVA_WEAK_RANDOM,
+    JAVA_INSECURE_COOKIE,
     SQL_CONCATENATION,
     PHP_COMMAND,
     GO_SHELL,

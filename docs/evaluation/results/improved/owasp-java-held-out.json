@@ -1,0 +1,439 @@
+{
+  "schema": 1,
+  "benchmark": {
+    "name": "OWASP Benchmark for Java",
+    "version": "1.2",
+    "commit": "8b67a88d73b2594570fc21150705283de884620b",
+    "answer_key_sha256": "1809f6a690c6cf7dd6685df6ebe2eef8fe3ca93d19a7ca0ce45987ca4f5d78e1",
+    "split": "held-out",
+    "test_cases": 1389
+  },
+  "analyser": {
+    "version": "0.1.0",
+    "sha256": "79a0731a2106c72462c48b27c7086dc3009682eef2a271440f4d127fafb7e504",
+    "python": "3.13"
+  },
+  "files_analysed": 5668,
+  "overall": {
+    "all_categories": {
+      "categories": 11,
+      "pooled": {
+        "tp": 359,
+        "fp": 100,
+        "tn": 584,
+        "fn": 346,
+        "recall": 0.5092,
+        "recall_interval": [
+          0.4724,
+          0.546
+        ],
+        "false_positive_rate": 0.1462,
+        "false_positive_rate_interval": [
+          0.1217,
+          0.1747
+        ],
+        "precision": 0.7821,
+        "precision_interval": [
+          0.7421,
+          0.8175
+        ],
+        "f1": 0.6168,
+        "accuracy": 0.6789,
+        "score": 0.363,
+        "score_interval": [
+          0.3165,
+          0.4072
+        ]
+      },
+      "category_average": {
+        "recall": 0.4166,
+        "false_positive_rate": 0.0812,
+        "score": 0.3354
+      }
+    },
+    "categories_with_a_rule": {
+      "categories": 6,
+      "pooled": {
+        "tp": 359,
+        "fp": 100,
+        "tn": 356,
+        "fn": 96,
+        "recall": 0.789,
+        "recall_interval": [
+          0.7492,
+          0.824
+        ],
+        "false_positive_rate": 0.2193,
+        "false_positive_rate_interval": [
+          0.1838,
+          0.2595
+        ],
+        "precision": 0.7821,
+        "precision_interval": [
+          0.7421,
+          0.8175
+        ],
+        "f1": 0.7856,
+        "accuracy": 0.7849,
+        "score": 0.5697,
+        "score_interval": [
+          0.5131,
+          0.6196
+        ]
+      },
+      "category_average": {
+        "recall": 0.7637,
+        "false_positive_rate": 0.1488,
+        "score": 0.6149
+      }
+    }
+  },
+  "categories": [
+    {
+      "category": "cmdi",
+      "cwe": 78,
+      "rules": [
+        "JV001"
+      ],
+      "tp": 0,
+      "fp": 0,
+      "tn": 74,
+      "fn": 58,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.0621
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0493
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.5606,
+      "score": 0.0,
+      "score_interval": [
+        -0.0493,
+        0.0621
+      ]
+    },
+    {
+      "category": "crypto",
+      "cwe": 327,
+      "rules": [
+        "JV004"
+      ],
+      "tp": 60,
+      "fp": 0,
+      "tn": 62,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.9398,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0583
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.9398,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.9162,
+        1.0
+      ]
+    },
+    {
+      "category": "hash",
+      "cwe": 328,
+      "rules": [
+        "JV003"
+      ],
+      "tp": 51,
+      "fp": 0,
+      "tn": 56,
+      "fn": 24,
+      "recall": 0.68,
+      "recall_interval": [
+        0.5679,
+        0.7746
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0642
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.93,
+        1.0
+      ],
+      "f1": 0.8095,
+      "accuracy": 0.8168,
+      "score": 0.68,
+      "score_interval": [
+        0.5508,
+        0.7746
+      ]
+    },
+    {
+      "category": "ldapi",
+      "cwe": 90,
+      "rules": [],
+      "tp": 0,
+      "fp": 0,
+      "tn": 11,
+      "fn": 13,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.2281
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2588
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.4583,
+      "score": 0.0,
+      "score_interval": [
+        -0.2588,
+        0.2281
+      ]
+    },
+    {
+      "category": "pathtraver",
+      "cwe": 22,
+      "rules": [],
+      "tp": 0,
+      "fp": 0,
+      "tn": 76,
+      "fn": 68,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.0535
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0481
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.5278,
+      "score": 0.0,
+      "score_interval": [
+        -0.0481,
+        0.0535
+      ]
+    },
+    {
+      "category": "securecookie",
+      "cwe": 614,
+      "rules": [
+        "JV006"
+      ],
+      "tp": 17,
+      "fp": 0,
+      "tn": 15,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.8157,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2039
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.8157,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.7252,
+        1.0
+      ]
+    },
+    {
+      "category": "sqli",
+      "cwe": 89,
+      "rules": [
+        "SQL001"
+      ],
+      "tp": 129,
+      "fp": 100,
+      "tn": 12,
+      "fn": 14,
+      "recall": 0.9021,
+      "recall_interval": [
+        0.8424,
+        0.9408
+      ],
+      "false_positive_rate": 0.8929,
+      "false_positive_rate_interval": [
+        0.822,
+        0.9376
+      ],
+      "precision": 0.5633,
+      "precision_interval": [
+        0.4986,
+        0.626
+      ],
+      "f1": 0.6935,
+      "accuracy": 0.5529,
+      "score": 0.0092,
+      "score_interval": [
+        -0.0654,
+        0.09
+      ]
+    },
+    {
+      "category": "trustbound",
+      "cwe": 501,
+      "rules": [],
+      "tp": 0,
+      "fp": 0,
+      "tn": 20,
+      "fn": 49,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.0727
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.1611
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.2899,
+      "score": 0.0,
+      "score_interval": [
+        -0.1611,
+        0.0727
+      ]
+    },
+    {
+      "category": "weakrand",
+      "cwe": 330,
+      "rules": [
+        "JV005"
+      ],
+      "tp": 102,
+      "fp": 0,
+      "tn": 137,
+      "fn": 0,
+      "recall": 1.0,
+      "recall_interval": [
+        0.9637,
+        1.0
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0273
+      ],
+      "precision": 1.0,
+      "precision_interval": [
+        0.9637,
+        1.0
+      ],
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "score": 1.0,
+      "score_interval": [
+        0.9546,
+        1.0
+      ]
+    },
+    {
+      "category": "xpathi",
+      "cwe": 643,
+      "rules": [],
+      "tp": 0,
+      "fp": 0,
+      "tn": 9,
+      "fn": 4,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.4899
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.2991
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.6923,
+      "score": 0.0,
+      "score_interval": [
+        -0.2991,
+        0.4899
+      ]
+    },
+    {
+      "category": "xss",
+      "cwe": 79,
+      "rules": [],
+      "tp": 0,
+      "fp": 0,
+      "tn": 112,
+      "fn": 116,
+      "recall": 0.0,
+      "recall_interval": [
+        0.0,
+        0.0321
+      ],
+      "false_positive_rate": 0.0,
+      "false_positive_rate_interval": [
+        0.0,
+        0.0332
+      ],
+      "precision": null,
+      "precision_interval": null,
+      "f1": 0.0,
+      "accuracy": 0.4912,
+      "score": 0.0,
+      "score_interval": [
+        -0.0332,
+        0.0321
+      ]
+    }
+  ],
+  "unscored_findings": {
+    "in_test_cases_by_rule": {},
+    "outside_test_cases": 4
+  },
+  "outcomes_sha256": "1f5ff2a2e10129d8a3e0500d57660aab95b45cbe8e0594d93cce6ee4eeb206ed",
+  "compared_with_earlier_run": {
+    "test_cases": 1389,
+    "fixed": 345,
+    "broken": 100,
+    "mcnemar_p_value": 1.31e-32
+  }
+}

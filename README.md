@@ -168,6 +168,14 @@ python -m app.cli scan . --baseline out.sarif                # fail only on what
 See [the command-line scanner](docs/devsecops/command-line.md). The workflow in
 `.github/workflows/ci.yml` runs it on every push and pull request.
 
+## How good is it?
+
+Measured, not asserted. `python -m app.cli evaluate` marks the analyser against
+a benchmark whose answers are published, and the results — including the
+categories it fails — are recorded in [docs/evaluation](docs/evaluation/README.md).
+`.\scripts\evaluate.ps1` downloads the two benchmarks and checks that the
+recorded results can be reproduced.
+
 ## In VS Code
 
 The extension in `vscode-extension/` runs the same scanner and puts each finding
@@ -202,11 +210,13 @@ See [running with Docker](docs/devsecops/docker.md).
 | 13 | Reports (HTML, Markdown, SARIF, JSON) | ✅ Done |
 | 14 | DevSecOps integration (command-line scanner, quality gate, CI workflow, Docker Compose) | ✅ Done |
 | 15 | VS Code extension | ✅ Done |
-| 16 | Research evaluation | Planned |
+| 16 | Research evaluation (benchmark with known answers, data flow for Python, patch-outcome classifier) | ✅ Done |
 
 ## Limitations (current)
 
-- Analysis is rule-based and local: there is no data-flow (taint) tracking yet, so a finding says "this call is dangerous", not "user input reaches it".
+- Request data is followed to the call it reaches **for Python only, and inside one file**. For Java, JavaScript, PHP and Go the rules are still local: a finding says "this call is dangerous", not "user input reaches it".
+- Measured on the OWASP benchmarks, on test cases the rules were never tuned on, the analyser scores **+88 out of 100 for Python and +33 for Java** (recall minus false positive rate, averaged over categories). Java has no rule at all for five of the benchmark's eleven categories, and its SQL-injection rule cannot tell an injectable query from a safe one. These are results on generated test cases, not on real projects; see [the evaluation](docs/evaluation/README.md) for what they do and do not show.
+- The patch-outcome classifier has a training pipeline and **no result**: it needs fixes that were proposed and checked on a real installation, and refuses to train on fewer than 60. The application does not use it to decide anything.
 - "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
 - Scans run in the background on the API machine. Workers on other machines, and scheduled scans, are not built yet.
 - The knowledge base has to be built once, by hand (`python scripts/build_knowledge.py`), from a
@@ -241,8 +251,9 @@ See [running with Docker](docs/devsecops/docker.md).
   rather than anything derived from incident data, they live in one reviewable file
   (`app/risk/policy.py`), and every score is shown with the arithmetic that produced it. It is
   not CVSS and does not map onto CVSS.
-- Risk cannot account for reachability — without taint analysis there is no way to know whether
-  user input reaches a dangerous call, so the score uses the file path as a heuristic and says so.
+- Risk does not account for reachability. For Python the analyser now knows when request data
+  reaches a call, but the score does not use that yet: it still uses the file path as a heuristic
+  and says so.
 - The dashboard counts what is in the database when it is opened. It reads every finding you
   own on each request and scores them in memory, which is exact and fast for thousands of
   findings and would need to become SQL aggregation, or a cache, for hundreds of thousands. It
@@ -285,6 +296,8 @@ See [running with Docker](docs/devsecops/docker.md).
 - [The command-line scanner and the quality gate](docs/devsecops/command-line.md)
 - [Running with Docker](docs/devsecops/docker.md)
 - [The VS Code extension](vscode-extension/README.md)
+- [Evaluation: how often is the analyser right?](docs/evaluation/README.md)
+- [Evaluation: the patch-outcome classifier](docs/evaluation/classifier.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
 - [Phase 2 report](docs/development/phases/phase-02-authentication.md)
 - [Phase 3 report](docs/development/phases/phase-03-projects.md)
@@ -300,3 +313,4 @@ See [running with Docker](docs/devsecops/docker.md).
 - [Phase 13 report](docs/development/phases/phase-13-reports.md)
 - [Phase 14 report](docs/development/phases/phase-14-devsecops.md)
 - [Phase 15 report](docs/development/phases/phase-15-vscode.md)
+- [Phase 16 report](docs/development/phases/phase-16-evaluation.md)

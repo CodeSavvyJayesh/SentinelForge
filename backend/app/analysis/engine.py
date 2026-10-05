@@ -92,6 +92,10 @@ class AnalysisResult:
     files_scanned: int = 0
     files_skipped: int = 0
     unparsable_files: int = 0
+    # Which ones, relative to the root. Not stored with a scan; kept so that a
+    # measurement can tell "found nothing in this file" from "could not read
+    # this file as Python at all".
+    unparsable_paths: list[str] = field(default_factory=list)
     truncated: bool = False
     duration_ms: int = 0
 
@@ -202,6 +206,7 @@ def _analyze_file(text: str, relative: str, suffix: str, result: AnalysisResult)
             # Unparsable: counted, never guessed at. Deeply nested literals can
             # also exhaust the recursion limit, which is not a finding either.
             result.unparsable_files += 1
+            result.unparsable_paths.append(relative)
     else:
         findings.extend(analyze_with_patterns(text, relative, suffix))
 
