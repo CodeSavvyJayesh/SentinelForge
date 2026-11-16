@@ -179,7 +179,9 @@ recorded results can be reproduced.
 ## In VS Code
 
 The extension in `vscode-extension/` runs the same scanner and puts each finding
-on its line, in the Problems panel and in the status bar. Open that folder in
+on its line, in the Problems panel and in the status bar. Each finding has quick
+fixes — a built-in fix where one exists, or your local model — and every fix is
+checked by scanning a copy before you are asked to apply it. Open that folder in
 VS Code and press `F5`, or see [its README](vscode-extension/README.md).
 
 ## With Docker
@@ -211,6 +213,7 @@ See [running with Docker](docs/devsecops/docker.md).
 | 14 | DevSecOps integration (command-line scanner, quality gate, CI workflow, Docker Compose) | ✅ Done |
 | 15 | VS Code extension | ✅ Done |
 | 16 | Research evaluation (benchmark with known answers, data flow for Python, patch-outcome classifier) | ✅ Done |
+| 17 | Fixes in VS Code and on the command line (built-in fixes and the local model, each re-scanned) | ✅ Done |
 
 ## Limitations (current)
 
@@ -274,6 +277,9 @@ See [running with Docker](docs/devsecops/docker.md).
 - The VS Code extension scans on request or on save, not as you type, and it underlines whole
   lines. It is run from its folder (`F5`) rather than installed: packaging it as a `.vsix` has
   not been done.
+- Built-in fixes exist for 12 rules; for the others the local model is asked, which takes up to
+  a minute on a CPU and is not always right. A fix is offered only after a re-scan of a copy
+  supports it, but the re-scan does not show the program still behaves the same.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -314,3 +320,4 @@ See [running with Docker](docs/devsecops/docker.md).
 - [Phase 14 report](docs/development/phases/phase-14-devsecops.md)
 - [Phase 15 report](docs/development/phases/phase-15-vscode.md)
 - [Phase 16 report](docs/development/phases/phase-16-evaluation.md)
+- [Phase 17 report](docs/development/phases/phase-17-vscode-fixes.md)
