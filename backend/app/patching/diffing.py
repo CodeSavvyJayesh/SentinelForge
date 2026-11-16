@@ -167,12 +167,29 @@ def check_syntax(file_path: str, after: list[str]) -> None:
         raise PatchRejected("The proposed change could not be parsed.") from exc
 
 
+def build_checked(
+    file_path: str, before: list[str], after: list[str], *, replaced_lines: int
+) -> Diff:
+    """The diff of a proposed change, or the reason it is not worth showing.
+
+    Every check a proposal has to pass before a re-scan is worth running, in
+    one place, so that a change proposed through the web application and one
+    proposed from an editor are refused for exactly the same reasons.
+    """
+    diff = build(file_path, before, after)
+    check(diff, replaced_lines=replaced_lines)
+    check_substance(file_path, diff.added_lines)
+    check_syntax(file_path, after)
+    return diff
+
+
 __all__ = [
     "MAX_ADDED_LINES",
     "MAX_NET_REMOVED_LINES",
     "Diff",
     "PatchRejected",
     "build",
+    "build_checked",
     "check",
     "check_substance",
     "check_syntax",

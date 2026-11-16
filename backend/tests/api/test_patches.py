@@ -522,6 +522,43 @@ def test_garbage_from_the_model_is_reported_not_crashed(
     assert "not valid JSON" in body["error_message"]
 
 
+def test_a_finding_on_a_long_line_is_not_mistaken_for_code_that_moved(
+    api_client: TestClient,
+    db_session: Session,
+    stub_embedder,
+    fake_llm,
+    patch_worker,
+    workspace_root: Path,
+) -> None:
+    """A stored snippet is cut at 240 characters and ends in an ellipsis.
+
+    Compared as it stands, it is never found in the file — the file has the
+    rest of the line where the ellipsis is — so every finding on a long line
+    was refused with "the code has changed". It had not.
+    """
+    from app.analysis.findings import clean_snippet
+
+    padding = ", ".join(f'"{number:03d}"' for number in range(60))
+    long_line = f"    return hashlib.md5(value).hexdigest(), [{padding}]"
+    source = VULNERABLE.replace("    return hashlib.md5(value).hexdigest()", long_line)
+    build_knowledge(db_session, stub_embedder)
+    fake_llm.response = patch_response(long_line.replace("md5", "sha256"))
+    token = sign_up(api_client, "longline")
+    finding = make_finding(
+        api_client,
+        db_session,
+        token,
+        workspace_root,
+        source=source,
+        snippet=clean_snippet(long_line),
+    )
+    assert finding.snippet.endswith("…")
+
+    body = propose(api_client, token, finding.id, patch_worker)
+
+    assert body["status"] == PatchStatus.PROPOSED, body["error_message"]
+
+
 def test_an_already_fixed_finding_cannot_be_patched(
     api_client: TestClient, db_session: Session, stub_embedder, workspace_root: Path
 ) -> None:

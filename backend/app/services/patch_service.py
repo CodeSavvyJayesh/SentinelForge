@@ -49,8 +49,15 @@ from app.models import (
     Repository,
     User,
 )
-from app.patching import diffing
-from app.patching.region import Region, RegionError, read_region, reindent, splice
+from app.patching import CREDENTIAL_MESSAGE, RETRY_TEMPERATURE, diffing
+from app.patching.region import (
+    Region,
+    RegionError,
+    read_region,
+    reindent,
+    splice,
+    still_holds,
+)
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.explanation_repository import ExplanationRepository
 from app.repositories.finding_repository import FindingRepository
@@ -59,19 +66,6 @@ from app.services.auth_service import RequestContext
 from app.services.knowledge_service import KnowledgeBaseNotBuiltError, KnowledgeService
 
 logger = get_logger("sentinelforge.patches")
-
-CREDENTIAL_MESSAGE = (
-    "A leaked credential cannot be fixed by editing the file: it is already in every copy "
-    "of the repository and in its history. Rotate it, remove it from the code, and load the "
-    "new one from the environment or a secret manager."
-)
-
-# Temperature for a retry. The first attempt runs at the configured default
-# (0), because a reproducible answer is worth having. But at 0 the model is
-# deterministic, so retrying a failure returns the identical failure — and the
-# UI offering a "Try again" button that cannot produce anything new is a lie
-# told by the interface. A retry therefore asks a slightly different question.
-RETRY_TEMPERATURE = 0.3
 
 
 class PatchNotFoundError(AppError):
@@ -213,10 +207,9 @@ class PatchService:
             patch.reindented = reindented
 
             after = splice(region, replacement)
-            diff = diffing.build(finding.file_path, region.file_lines, after)
-            diffing.check(diff, replaced_lines=len(region.lines))
-            diffing.check_substance(finding.file_path, diff.added_lines)
-            diffing.check_syntax(finding.file_path, after)
+            diff = diffing.build_checked(
+                finding.file_path, region.file_lines, after, replaced_lines=len(region.lines)
+            )
 
             patch.status = PatchStatus.PROPOSED
             patch.model = completion.model
@@ -305,10 +298,7 @@ class PatchService:
         and cannot be compared, which was once handled by exempting them here.
         They are now refused outright in ``_assert_patchable``.
         """
-        snippet = (finding.snippet or "").strip()
-        if not snippet:
-            return
-        if snippet.splitlines()[0].strip() not in region.text:
+        if not still_holds(region, finding.snippet):
             raise FindingNotPatchableError(
                 "The code has changed since this finding was recorded, so a proposed change "
                 "would edit the wrong lines. Scan again first."

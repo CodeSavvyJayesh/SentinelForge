@@ -47,7 +47,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from app.analysis.engine import analysable_files, analyze_workspace
+from app.analysis.engine import AnalysisResult, analysable_files, analyze_workspace
 from app.analysis.findings import Finding
 from app.core.config import Settings
 from app.patching import apply as patch_apply
@@ -112,8 +112,16 @@ def validate(
     diff_text: str,
     target_fingerprint: str,
     settings: Settings,
+    *,
+    before: AnalysisResult | None = None,
 ) -> Outcome:
-    """Apply ``diff_text`` to a copy of ``workspace`` and compare two scans."""
+    """Apply ``diff_text`` to a copy of ``workspace`` and compare two scans.
+
+    ``before`` is a scan of ``workspace`` the caller has already made, as it is
+    now. Given one, the first of the two scans is not repeated: the copy holds
+    exactly the files that scan read, so scanning it again would produce the
+    same findings at the cost of a second pass over the repository.
+    """
     try:
         parsed = patch_apply.parse(diff_text)
     except patch_apply.PatchDoesNotApply as exc:
@@ -142,7 +150,8 @@ def validate(
                 "cannot say anything about it."
             )
 
-        before = analyze_workspace(copy, settings)
+        if before is None:
+            before = analyze_workspace(copy, settings)
         if before.truncated:
             raise CannotValidate(TRUNCATED_MESSAGE)
         target = next(
@@ -221,14 +230,43 @@ def _judge(
         )
 
     # 2. Nothing is detected that was not there before.
-    appeared = [
-        item for item in after if after_counts[identity(item)] > before_counts[identity(item)]
-    ]
+    #
+    # A finding's identity includes the text of its line, so a finding of
+    # *another* rule on a line this change edited comes back with a new
+    # identity: `md5(os.popen(cmd))` and `sha256(os.popen(cmd))` are the same
+    # command injection, written on a line that now reads differently. Calling
+    # that "new" would refuse every fix on a line with two findings. So for
+    # other rules the question is asked of the count: does this file now have
+    # more findings of that rule than it had? For the target's own rule the
+    # text is the question — the same rule firing on the rewritten line is a
+    # weakness reworded, not removed.
+    gained: Counter[tuple[str, str]] = Counter()
+    lost: Counter[tuple[str, str]] = Counter()
+    for key in before_counts.keys() | after_counts.keys():
+        change = after_counts[key] - before_counts[key]
+        if change > 0:
+            gained[key[:2]] += change
+        elif change < 0:
+            lost[key[:2]] -= change
+    target_group = (target.rule_id, target.file_path)
+    reworded = gained[target_group] > 0
+    introduced = {
+        group: gained[group] - lost[group]
+        for group in gained
+        if group != target_group and gained[group] > lost[group]
+    }
+    carried = sorted(
+        {group[0] for group in gained if group != target_group and group not in introduced}
+    )
+
     seen: set[Identity] = set()
-    for item in appeared:
-        if identity(item) in seen:
+    for item in after:
+        key = identity(item)
+        if after_counts[key] <= before_counts[key] or key in seen:
             continue
-        seen.add(identity(item))
+        if key[:2] != target_group and key[:2] not in introduced:
+            continue
+        seen.add(key)
         if len(outcome.new_findings) < MAX_LISTED_FINDINGS:
             outcome.new_findings.append(
                 {
@@ -239,13 +277,7 @@ def _judge(
                     "line": item.line_start,
                 }
             )
-    if not seen:
-        outcome.checks.append(
-            Check(
-                "no_new_findings", PASSED, "The re-scan detects nothing that was not there before."
-            )
-        )
-    elif any(key[0] == target.rule_id and key[1] == target.file_path for key in seen):
+    if reworded:
         outcome.checks.append(
             Check(
                 "no_new_findings",
@@ -254,20 +286,35 @@ def _judge(
                 "reworded rather than removed.",
             )
         )
-    else:
+    elif introduced:
+        count = sum(introduced.values())
         outcome.checks.append(
             Check(
                 "no_new_findings",
                 FAILED,
-                f"The change introduces {len(seen)} finding{'s' if len(seen) != 1 else ''} "
+                f"The change introduces {count} finding{'s' if count != 1 else ''} "
                 "that the original code did not have.",
             )
         )
+    else:
+        detail = "The re-scan detects nothing that was not there before."
+        if carried:
+            # Said, because the developer is about to read "passed" beside a
+            # line that still has something wrong with it.
+            detail += (
+                f" The changed code still has its other finding{'s' if len(carried) != 1 else ''}"
+                f" ({', '.join(carried)}), which this change was not for."
+            )
+        outcome.checks.append(Check("no_new_findings", PASSED, detail))
 
     outcome.also_resolved = sum(
         count - after_counts[key]
         for key, count in before_counts.items()
-        if key != target_key and after_counts[key] < count
+        if key != target_key and key[:2] == target_group and after_counts[key] < count
+    ) + sum(
+        lost[group] - gained[group]
+        for group in lost
+        if group != target_group and lost[group] > gained[group]
     )
 
     # 3. The change replaces code with code. Recounted from the diff itself

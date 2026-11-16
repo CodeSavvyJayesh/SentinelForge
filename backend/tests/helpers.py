@@ -111,6 +111,9 @@ class FakeOllama:
         ready_error: Exception | None = None,
     ) -> None:
         self.model = model
+        # What the real client was configured with, and reports for a call that
+        # did not override it.
+        self.temperature = 0.0
         self.response = (
             response
             if response is not None
