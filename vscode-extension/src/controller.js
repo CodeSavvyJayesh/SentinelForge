@@ -8,14 +8,31 @@
  * check what would have been shown, without an editor running.
  */
 
-const { toDiagnostics, statusFor } = require('./diagnostics')
+const { SOURCE, toDiagnostics, statusFor } = require('./diagnostics')
+const { MODES, STATUSES, isFingerprint, isMode, planEdits, proposedText, verifiedDetail } = require('./fixes')
 const scanner = require('./scanner')
 
 const SAVE_DEBOUNCE_MS = 1000
 const IDLE_TEXT = '$(shield) SentinelForge'
+const FIX_COMMAND = 'sentinelforge.fix'
+const PROPOSAL_SCHEME = 'sentinelforge-fix'
+// How many proposed versions of a file are kept for the side-by-side view.
+const MAX_PROPOSALS = 8
+const ASK_MODEL_TITLE = 'SentinelForge: Ask the local model for a fix'
+const BUTTONS = Object.freeze({
+  APPLY: 'Apply',
+  SHOW: 'Show changes',
+  DISCARD: 'Discard',
+  SHOW_REJECTED: 'Show what was rejected',
+  TRY_AGAIN: 'Try again',
+  ASK_MODEL: 'Ask the local model',
+  SCAN: 'Scan again',
+  SETTINGS: 'Open settings',
+})
 
 function createController(vscode, context, dependencies = {}) {
   const runScan = dependencies.scan ?? scanner.scan
+  const runFix = dependencies.fix ?? scanner.fix
   const setTimer = dependencies.setTimeout ?? setTimeout
   const clearTimer = dependencies.clearTimeout ?? clearTimeout
 
@@ -30,6 +47,16 @@ function createController(vscode, context, dependencies = {}) {
   let running = false
   let again = false
   let saveTimer = null
+  let fixing = false
+  // Set while this extension saves a file it has just fixed: that save is
+  // followed by a scan of its own, so scan-on-save must not start a second.
+  let savingAFix = false
+  // What each diagnostic can be offered, by where it is. An editor hands a
+  // code action provider its own copies of the diagnostics, so nothing stored
+  // on the objects themselves can be relied on to come back.
+  let fixable = new Map()
+  const proposals = new Map()
+  let proposalCount = 0
 
   const levels = {
     error: vscode.DiagnosticSeverity.Error,
@@ -50,14 +77,39 @@ function createController(vscode, context, dependencies = {}) {
     }
   }
 
+  function modelSettings(folder) {
+    const configuration = vscode.workspace.getConfiguration('sentinelforge', folder?.uri)
+    const seconds = Number(configuration.get('modelTimeoutSeconds'))
+    return {
+      url: String(configuration.get('ollamaUrl') || ''),
+      name: String(configuration.get('model') || ''),
+      timeoutSeconds:
+        Number.isFinite(seconds) && seconds >= 10 ? Math.round(seconds) : scanner.DEFAULT_MODEL_TIMEOUT_SECONDS,
+      allowRemote: configuration.get('allowRemoteModel') === true,
+    }
+  }
+
+  function fixKey(uri, line, code) {
+    return `${uri.toString()}\n${line}\n${code}`
+  }
+
+  function codeOf(diagnostic) {
+    const code = diagnostic.code
+    return code !== null && typeof code === 'object' ? code.value : code
+  }
+
   function show(folder, report) {
     const { files, skipped } = toDiagnostics(report)
     const entries = []
+    const fixes = []
     for (const { segments, items } of files.values()) {
       const uri = vscode.Uri.joinPath(folder.uri, ...segments)
       entries.push([
         uri,
         items.map((item) => {
+          if (item.fix) {
+            fixes.push([fixKey(uri, item.line, item.code), { ...item.fix, folder: folder.uri.fsPath }])
+          }
           // To the end of the line, whatever its length: the editor clips the
           // range to the text that is actually there.
           const range = new vscode.Range(item.line, 0, item.lastLine, Number.MAX_SAFE_INTEGER)
@@ -70,7 +122,7 @@ function createController(vscode, context, dependencies = {}) {
         }),
       ])
     }
-    return { entries, skipped }
+    return { entries, skipped, fixes }
   }
 
   async function explainFailure(error) {
@@ -105,6 +157,7 @@ function createController(vscode, context, dependencies = {}) {
     let ok = true
     try {
       const all = []
+      const offers = new Map()
       const totals = { open_count: 0, score: 0, grade: 'A', counts_by_severity: {}, scan: {} }
       let excluded = 0
       let skipped = 0
@@ -118,6 +171,9 @@ function createController(vscode, context, dependencies = {}) {
         })
         const shown = show(folder, result.report)
         all.push(...shown.entries)
+        // Two findings of one rule on one line share a key. The first is kept:
+        // either fingerprint names that line, and a fix rewrites the line.
+        for (const [key, info] of shown.fixes) if (!offers.has(key)) offers.set(key, info)
         skipped += shown.skipped
         excluded += result.excluded
         merge(totals, result.report)
@@ -130,6 +186,7 @@ function createController(vscode, context, dependencies = {}) {
       // Problems panel never shows half of an old result and half of a new one.
       collection.clear()
       collection.set(all)
+      fixable = offers
       const summary = statusFor(totals, { excluded, skipped })
       status.text = summary.text
       status.tooltip = summary.tooltip
@@ -157,13 +214,218 @@ function createController(vscode, context, dependencies = {}) {
     }
   }
 
+  // --- fixes -----------------------------------------------------------------
+
+  /** The quick fixes for the SentinelForge findings under the cursor. */
+  function provideCodeActions(document, _range, actionContext) {
+    const actions = []
+    const offered = new Set()
+    for (const diagnostic of actionContext?.diagnostics ?? []) {
+      if (diagnostic.source !== SOURCE) continue
+      const key = fixKey(document.uri, diagnostic.range.start.line, codeOf(diagnostic))
+      const info = fixable.get(key)
+      // Nothing for a credential: it is rotated, not edited.
+      if (!info || info.credential || offered.has(key)) continue
+      offered.add(key)
+      const request = { folder: info.folder, file: document.uri.fsPath, fingerprint: info.fingerprint }
+      const add = (title, mode, preferred) => {
+        const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix)
+        action.diagnostics = [diagnostic]
+        action.isPreferred = preferred
+        action.command = { command: FIX_COMMAND, title, arguments: [{ ...request, mode }] }
+        actions.push(action)
+      }
+      if (info.builtinTitle) add(`SentinelForge: ${info.builtinTitle}`, MODES.BUILTIN, true)
+      add(ASK_MODEL_TITLE, MODES.MODEL, false)
+    }
+    return actions
+  }
+
+  function folderFor(fsPath) {
+    return (vscode.workspace.workspaceFolders ?? []).find((folder) => folder.uri.fsPath === fsPath)
+  }
+
+  function linesOf(document) {
+    const lines = []
+    for (let index = 0; index < document.lineCount; index += 1) lines.push(document.lineAt(index).text)
+    return lines
+  }
+
+  async function explainFixFailure(error, request) {
+    const known = error instanceof scanner.ScanError
+    const message = known ? error.message : `SentinelForge: ${error}`
+    output.appendLine(message)
+    if (known && error.detail) output.appendLine(error.detail)
+    const setup = error instanceof scanner.FixError && error.setup
+    const choice = await vscode.window.showErrorMessage(message, setup ? BUTTONS.SETTINGS : BUTTONS.SCAN)
+    if (choice === BUTTONS.SETTINGS) {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'sentinelforge')
+    } else if (choice === BUTTONS.SCAN) {
+      await scanWorkspace()
+    }
+    return request
+  }
+
+  async function showProposal(document, text, title) {
+    proposalCount += 1
+    const id = String(proposalCount)
+    proposals.set(id, text)
+    while (proposals.size > MAX_PROPOSALS) proposals.delete(proposals.keys().next().value)
+    const name = document.uri.fsPath.split(/[\\/]/).pop() || 'file'
+    const proposed = vscode.Uri.parse(`${PROPOSAL_SCHEME}:${encodeURIComponent(name)}?${id}`)
+    await vscode.commands.executeCommand('vscode.diff', document.uri, proposed, `${name}: ${title} (proposed)`)
+  }
+
+  async function showRejected(result) {
+    const view = await vscode.workspace.openTextDocument({ content: result.diff, language: 'diff' })
+    await vscode.window.showTextDocument(view, { preview: true })
+  }
+
+  /** Make the checked edits in the document, or say why they were not made. */
+  async function apply(document, result) {
+    // Asked again, at the last moment: the question was open for as long as
+    // the user took to answer it, and the file may have been edited since.
+    const plan = document.isDirty ? { ok: false } : planEdits(linesOf(document), result.edits)
+    if (!plan.ok) {
+      const choice = await vscode.window.showWarningMessage(
+        'The file has changed since this fix was checked, so nothing was applied. Scan again, then ask for the fix.',
+        BUTTONS.SCAN,
+      )
+      if (choice === BUTTONS.SCAN) await scanWorkspace()
+      return false
+    }
+    const edit = new vscode.WorkspaceEdit()
+    for (const { start, end, text } of plan.replacements) {
+      edit.replace(document.uri, new vscode.Range(start.line, start.character, end.line, end.character), text)
+    }
+    if ((await vscode.workspace.applyEdit(edit)) !== true) {
+      await vscode.window.showErrorMessage('SentinelForge: the editor did not accept the change. Nothing was applied.')
+      return false
+    }
+    savingAFix = true
+    try {
+      await document.save()
+    } finally {
+      savingAFix = false
+    }
+    output.appendLine(`Applied: ${result.title} (${document.uri.fsPath})`)
+    // The scanner reads files, so the findings are refreshed from what was
+    // saved. This is also the user's own confirmation that the finding is gone.
+    await scanWorkspace()
+    return true
+  }
+
+  async function present(result, request, document) {
+    if (result.status === STATUSES.VERIFIED) {
+      // Checked now so that "Show changes" never opens on a file that is not
+      // the one the change was worked out from.
+      const text = proposedText(document.getText(), result.edits)
+      if (text === null) return apply(document, result)
+      let choice = await vscode.window.showInformationMessage(
+        result.title,
+        { modal: true, detail: verifiedDetail(result) },
+        BUTTONS.APPLY,
+        BUTTONS.SHOW,
+      )
+      if (choice === BUTTONS.SHOW) {
+        await showProposal(document, text, result.title)
+        choice = await vscode.window.showInformationMessage(
+          `Apply "${result.title}" to this file?`,
+          BUTTONS.APPLY,
+          BUTTONS.DISCARD,
+        )
+      }
+      return choice === BUTTONS.APPLY ? apply(document, result) : false
+    }
+
+    const model = request.mode === MODES.MODEL
+    if (result.status === STATUSES.REJECTED) {
+      const buttons = []
+      if (result.diff) buttons.push(BUTTONS.SHOW_REJECTED)
+      if (model) buttons.push(BUTTONS.TRY_AGAIN)
+      const choice = await vscode.window.showWarningMessage(
+        `SentinelForge did not offer this change. ${result.reason || 'It did not pass the checks.'}`,
+        ...buttons,
+      )
+      if (choice === BUTTONS.SHOW_REJECTED) await showRejected(result)
+      if (choice === BUTTONS.TRY_AGAIN) return fix({ ...request, retry: true })
+      return false
+    }
+
+    const choice = await vscode.window.showInformationMessage(
+      result.reason || 'SentinelForge has no change to offer for this finding.',
+      ...(model ? [] : [BUTTONS.ASK_MODEL]),
+    )
+    if (choice === BUTTONS.ASK_MODEL) return fix({ ...request, mode: MODES.MODEL })
+    return false
+  }
+
+  /**
+   * Work out a fix for one finding, show it, and apply it if the user says so.
+   * Returns true only when a change was applied.
+   */
+  async function fix(request) {
+    const folder = folderFor(request?.folder)
+    if (
+      !folder ||
+      typeof request.file !== 'string' ||
+      !isFingerprint(request.fingerprint) ||
+      !isMode(request.mode)
+    ) {
+      await vscode.window.showErrorMessage('SentinelForge: that finding cannot be fixed from here. Scan again first.')
+      return false
+    }
+    if (fixing) {
+      await vscode.window.showInformationMessage('SentinelForge is already checking a fix. One at a time.')
+      return false
+    }
+
+    fixing = true
+    let result
+    let document
+    try {
+      document = await vscode.workspace.openTextDocument(vscode.Uri.file(request.file))
+      if (document.isDirty) {
+        // The scanner reads the file on disk. A fix worked out from that would
+        // be checked against one text and applied to another.
+        await vscode.window.showWarningMessage('Save the file first: a fix is worked out from the file as it is saved.')
+        return false
+      }
+      const model = request.mode === MODES.MODEL
+      result = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: model
+            ? 'SentinelForge: asking the local model for a fix, then scanning it. This can take a minute…'
+            : 'SentinelForge: working out the fix and scanning it…',
+        },
+        () =>
+          runFix({
+            ...settings(folder),
+            folder: folder.uri.fsPath,
+            fingerprint: request.fingerprint,
+            mode: request.mode,
+            model: model ? { ...modelSettings(folder), retry: request.retry === true } : undefined,
+          }),
+      )
+    } catch (error) {
+      await explainFixFailure(error, request)
+      return false
+    } finally {
+      fixing = false
+    }
+    return present(result, request, document)
+  }
+
   function clear() {
     collection.clear()
+    fixable = new Map()
     status.text = IDLE_TEXT
     status.tooltip = 'Click to scan this workspace'
   }
 
   function onSave() {
+    if (savingAFix) return
     if (vscode.workspace.getConfiguration('sentinelforge').get('scanOnSave') !== true) return
     // "Save all" saves many files at once; that is one scan, not many.
     if (saveTimer !== null) clearTimer(saveTimer)
@@ -180,11 +442,22 @@ function createController(vscode, context, dependencies = {}) {
     vscode.commands.registerCommand('sentinelforge.scanWorkspace', () => scanWorkspace()),
     vscode.commands.registerCommand('sentinelforge.openReport', () => openReport()),
     vscode.commands.registerCommand('sentinelforge.clear', () => clear()),
+    vscode.commands.registerCommand(FIX_COMMAND, (request) => fix(request)),
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: 'file' },
+      { provideCodeActions },
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
+    // The proposed version of a file, for the side-by-side view. Read-only,
+    // held in memory, and never written anywhere.
+    vscode.workspace.registerTextDocumentContentProvider(PROPOSAL_SCHEME, {
+      provideTextDocumentContent: (uri) => proposals.get(uri.query) ?? '',
+    }),
     vscode.workspace.onDidSaveTextDocument(() => onSave()),
     { dispose: () => saveTimer !== null && clearTimer(saveTimer) },
   )
 
-  return { scanWorkspace, openReport, clear, onSave }
+  return { scanWorkspace, openReport, clear, onSave, fix, provideCodeActions }
 }
 
 const GRADES = ['A', 'B', 'C', 'D', 'F']
@@ -204,4 +477,13 @@ function merge(totals, report) {
   if (report.scan?.truncated === true) totals.scan.truncated = true
 }
 
-module.exports = { IDLE_TEXT, SAVE_DEBOUNCE_MS, createController, merge }
+module.exports = {
+  ASK_MODEL_TITLE,
+  BUTTONS,
+  FIX_COMMAND,
+  IDLE_TEXT,
+  PROPOSAL_SCHEME,
+  SAVE_DEBOUNCE_MS,
+  createController,
+  merge,
+}
