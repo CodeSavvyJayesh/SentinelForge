@@ -7,6 +7,7 @@ more fixes goes through the same queue as a click in the browser, and that the
 command refuses — and writes nothing — when there is too little to learn from.
 """
 
+import contextlib
 import io
 import json
 from datetime import timedelta
@@ -22,6 +23,8 @@ from app.learning.commands import (
     EXIT_ERROR,
     EXIT_NOT_ENOUGH,
     EXIT_OK,
+    STALL_MINUTES,
+    auto_command,
     collect_command,
     train_command,
 )
@@ -469,3 +472,111 @@ def test_the_command_says_what_it_asked_for_and_who_does_the_work(
 def test_a_limit_below_one_and_an_unknown_action_are_errors(db_session: Session) -> None:
     assert run_collection(db_session, "fixes", limit=0)[0] == EXIT_ERROR
     assert run_collection(db_session, "everything")[0] == EXIT_ERROR
+
+
+# --- collecting until there is enough ------------------------------------------
+
+
+class FakeTime:
+    """A clock that moves only when the loop sleeps."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps = 0
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps += 1
+        self.now += seconds
+
+
+def run_auto(db: Session, **options) -> tuple[int, str, FakeTime]:  # noqa: ANN003
+    out = io.StringIO()
+    time = FakeTime()
+    code = auto_command(
+        lambda: contextlib.nullcontext(db),
+        out=out,
+        sleep=time.sleep,
+        clock=time.clock,
+        **{"poll_seconds": 60, **options},
+    )
+    return code, out.getvalue(), time
+
+
+def test_auto_stops_at_once_when_there_is_enough(db_session: Session, repository) -> None:  # noqa: ANN001
+    fill(db_session, repository.id, passed=30, rejected=30)
+
+    code, output, time = run_auto(db_session)
+
+    assert code == EXIT_OK
+    assert "Next: python scripts/train_patch_classifier.py" in output
+    assert time.sleeps == 0
+
+
+def test_auto_asks_for_checks_before_fixes(db_session: Session, repository) -> None:  # noqa: ANN001
+    finding = finding_at(db_session, repository.id, 1)
+    patch = proposal(db_session, finding)  # proposed, never checked
+    finding_at(db_session, repository.id, 2)  # no fix yet
+
+    run_auto(db_session, max_minutes=1)
+
+    checks = db_session.scalars(
+        select(PatchValidation).where(PatchValidation.patch_id == patch.id)
+    ).all()
+    assert len(checks) == 1
+    # Nothing for the second finding while a check was outstanding.
+    assert db_session.scalars(select(Patch).where(Patch.status == PatchStatus.QUEUED)).all() == []
+
+
+def test_auto_asks_for_fixes_a_batch_at_a_time(db_session: Session, repository) -> None:  # noqa: ANN001
+    for line in range(1, 6):
+        finding_at(db_session, repository.id, line)
+
+    run_auto(db_session, batch=2, max_minutes=1)
+
+    queued = db_session.scalars(select(Patch).where(Patch.status == PatchStatus.QUEUED)).all()
+    assert len(queued) == 2
+
+
+def test_auto_says_the_backend_is_not_running_when_nothing_moves(
+    db_session: Session, repository
+) -> None:  # noqa: ANN001
+    finding_at(db_session, repository.id, 1)
+
+    code, output, time = run_auto(db_session)
+
+    assert code == EXIT_ERROR
+    assert "Is the backend running" in output
+    assert time.now >= STALL_MINUTES * 60
+
+
+def test_auto_says_to_scan_more_code_when_nothing_qualifies(
+    db_session: Session, repository
+) -> None:  # noqa: ANN001
+    fill(db_session, repository.id, passed=3, rejected=0)
+
+    code, output, _ = run_auto(db_session)
+
+    assert code == EXIT_NOT_ENOUGH
+    assert "Scan more code" in output
+
+
+def test_auto_asks_again_where_a_fix_was_rejected_before_giving_up(
+    db_session: Session, repository
+) -> None:  # noqa: ANN001
+    finding = finding_at(db_session, repository.id, 1)
+    proposal(db_session, finding, REJECTED)
+
+    run_auto(db_session, max_minutes=1)
+
+    attempts = db_session.scalars(select(Patch).where(Patch.finding_id == finding.id)).all()
+    assert len(attempts) == 2
+
+
+def test_auto_refuses_nonsense_settings(db_session: Session) -> None:
+    code, output, _ = run_auto(db_session, batch=0)
+
+    assert code == EXIT_ERROR
+    assert "must be positive" in output

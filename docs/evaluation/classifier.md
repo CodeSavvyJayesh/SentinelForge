@@ -102,7 +102,24 @@ every figure is noise with a decimal point.
 
 ## Running it
 
-From `backend`, with the virtual environment active and the database running:
+**The one-command way.** With the backend running in one window and Ollama
+(with `qwen2.5-coder:7b` pulled) available, and at least one repository
+scanned, run from the repository root:
+
+```powershell
+.\scripts\train-classifier.ps1
+```
+
+It asks the backend for fixes and checks a few at a time, prints the counts as
+they move, and stops when there are at least 60 judged fixes with 15 of each
+outcome — then trains and writes the report. It stops early, and says why, if
+nothing qualifies any more (scan more code), if nothing has moved for fifteen
+minutes (the backend or Ollama is not running), or after twelve hours. Stop it
+with `Ctrl+C` whenever you like and run it again later; what was collected is
+kept. On a CPU, expect hours: each fix is one generation.
+
+**Step by step**, from `backend`, with the virtual environment active and the
+database running:
 
 ```powershell
 python scripts\train_patch_classifier.py --status      # how much data is there?
@@ -115,6 +132,7 @@ to do what the buttons in the interface do, for findings that have no fix yet):
 python scripts\collect_patch_outcomes.py fixes --limit 25    # propose fixes
 python scripts\collect_patch_outcomes.py checks              # check the proposed ones
 python scripts\collect_patch_outcomes.py status
+python scripts\collect_patch_outcomes.py auto               # all of the above, until there is enough
 ```
 
 Each fix is a model generation, so twenty-five take a while on a CPU. Then:
