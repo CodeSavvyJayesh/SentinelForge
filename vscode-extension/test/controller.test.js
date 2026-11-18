@@ -8,6 +8,8 @@ const { ASK_MODEL_TITLE, BUTTONS, FIX_COMMAND, IDLE_TEXT, PROPOSAL_SCHEME, creat
 const { FixError, ScanError } = require('../src/scanner')
 const { parseFixResult } = require('../src/fixes')
 const { createFakeVscode } = require('../support/fake-vscode')
+const fs = require('node:fs')
+const os = require('node:os')
 
 function finding(overrides = {}) {
   return {
@@ -49,7 +51,7 @@ function fakeScanner(...results) {
   return { scan, calls }
 }
 
-function setup({ results = [{ report: report(), excluded: 0 }], fixResults = [], ...options } = {}) {
+function setup({ results = [{ report: report(), excluded: 0 }], fixResults = [], createEnvironment, ...options } = {}) {
   const fake = createFakeVscode(options)
   const scanner = fakeScanner(...results)
   const fixer = fakeScanner(...fixResults)
@@ -57,6 +59,7 @@ function setup({ results = [{ report: report(), excluded: 0 }], fixResults = [],
   const controller = createController(fake.vscode, fake.context, {
     scan: scanner.scan,
     fix: fixer.scan,
+    createEnvironment,
     setTimeout: (callback, delay) => {
       const timer = { callback, delay, cleared: false }
       timers.push(timer)
@@ -70,7 +73,7 @@ function setup({ results = [{ report: report(), excluded: 0 }], fixResults = [],
 }
 
 describe('activation', () => {
-  it('shows a status bar item that scans when clicked, and registers its four commands', () => {
+  it('shows a status bar item that scans when clicked, and registers its commands', () => {
     const { state } = setup()
 
     assert.equal(state.status.shown, true)
@@ -81,6 +84,7 @@ describe('activation', () => {
       'sentinelforge.fix',
       'sentinelforge.openReport',
       'sentinelforge.scanWorkspace',
+      'sentinelforge.setup',
     ])
   })
 
@@ -720,5 +724,88 @@ describe('when there is no fix to apply', () => {
 
     assert.match(state.errors.at(-1).message, /Could not reach Ollama/)
     assert.ok(state.output.some((line) => /Could not reach Ollama/.test(line)))
+  })
+})
+
+// --- installed from a package: the one-time setup ----------------------------
+
+/** An extension folder with the scanner packaged inside it, and no settings. */
+function packaged(extra = {}) {
+  const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-extension-'))
+  fs.mkdirSync(path.join(extensionPath, 'scanner', 'app', 'cli'), { recursive: true })
+  fs.writeFileSync(path.join(extensionPath, 'scanner', 'app', 'cli', '__main__.py'), '')
+  const calls = []
+  const context = setup({
+    extensionPath,
+    configuration: { pythonPath: '', backendPath: '' },
+    createEnvironment: async (options) => {
+      calls.push(options)
+      return '/storage/sentinelforge/scanner-env/bin/python'
+    },
+    ...extra,
+  })
+  return { ...context, extensionPath, environments: calls }
+}
+
+describe('the one-time setup', () => {
+  it('asks to set the scanner up instead of failing the first scan', async () => {
+    const { controller, state, scanner, environments } = packaged()
+
+    assert.equal(await controller.scanWorkspace(), false)
+
+    assert.equal(scanner.calls.length, 0)
+    assert.match(state.warnings[0].message, /one-time setup/)
+    assert.deepEqual(state.warnings[0].actions, [BUTTONS.SET_UP])
+    assert.equal(environments.length, 0)
+  })
+
+  it('installs only after the user agrees, into the extension storage, then scans', async () => {
+    const { controller, state, environments, extensionPath } = packaged()
+    state.warningChoices.push(BUTTONS.SET_UP)
+    state.infoChoices.push(BUTTONS.INSTALL)
+
+    await controller.scanWorkspace()
+
+    assert.equal(environments.length, 1)
+    assert.equal(environments[0].backendPath, path.join(extensionPath, 'scanner'))
+    assert.equal(environments[0].storagePath, '/storage/sentinelforge')
+    const question = state.infoCalls.find((call) => call.options?.modal)
+    assert.match(question.options.detail, /Nothing is installed into your own Python/)
+    assert.ok(state.infos.includes('SentinelForge: the scanner is set up. Scanning now.'))
+  })
+
+  it('installs nothing when the user does not agree', async () => {
+    const { controller, state, environments } = packaged()
+    state.warningChoices.push(BUTTONS.SET_UP)
+    state.infoChoices.push(undefined)
+
+    await controller.scanWorkspace()
+
+    assert.equal(environments.length, 0)
+  })
+
+  it('says what went wrong when the setup fails', async () => {
+    const { controller, state } = packaged({
+      createEnvironment: async () => {
+        const error = new (require('../src/setup').SetupError)('SentinelForge needs Python 3.12 or newer.', 'python3: 3.10')
+        throw error
+      },
+    })
+    state.infoChoices.push(BUTTONS.INSTALL)
+
+    assert.equal(await controller.setUp(), false)
+
+    assert.deepEqual(state.errors.at(-1), { message: 'SentinelForge needs Python 3.12 or newer.', actions: [] })
+    assert.ok(state.output.includes('python3: 3.10'))
+  })
+
+  it('also asks before a fix, and does not ask the scanner first', async () => {
+    const { controller, state, fixer } = packaged()
+
+    const request = { folder: '/work/project', file: '/work/project/a.py', fingerprint: 'c'.repeat(64), mode: 'builtin' }
+    assert.equal(await controller.fix(request), false)
+
+    assert.equal(fixer.calls.length, 0)
+    assert.match(state.warnings[0].message, /one-time setup/)
   })
 })

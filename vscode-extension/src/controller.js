@@ -11,10 +11,12 @@
 const { SOURCE, toDiagnostics, statusFor } = require('./diagnostics')
 const { MODES, STATUSES, isFingerprint, isMode, planEdits, proposedText, verifiedDetail } = require('./fixes')
 const scanner = require('./scanner')
+const setup = require('./setup')
 
 const SAVE_DEBOUNCE_MS = 1000
 const IDLE_TEXT = '$(shield) SentinelForge'
 const FIX_COMMAND = 'sentinelforge.fix'
+const SETUP_COMMAND = 'sentinelforge.setup'
 const PROPOSAL_SCHEME = 'sentinelforge-fix'
 // How many proposed versions of a file are kept for the side-by-side view.
 const MAX_PROPOSALS = 8
@@ -28,11 +30,15 @@ const BUTTONS = Object.freeze({
   ASK_MODEL: 'Ask the local model',
   SCAN: 'Scan again',
   SETTINGS: 'Open settings',
+  SET_UP: 'Set up the scanner',
+  INSTALL: 'Install',
 })
 
 function createController(vscode, context, dependencies = {}) {
   const runScan = dependencies.scan ?? scanner.scan
   const runFix = dependencies.fix ?? scanner.fix
+  const createEnvironment = dependencies.createEnvironment ?? setup.createEnvironment
+  const runProcess = dependencies.execFile ?? scanner.execFile
   const setTimer = dependencies.setTimeout ?? setTimeout
   const clearTimer = dependencies.clearTimeout ?? clearTimeout
 
@@ -48,6 +54,7 @@ function createController(vscode, context, dependencies = {}) {
   let again = false
   let saveTimer = null
   let fixing = false
+  let settingUp = false
   // Set while this extension saves a file it has just fixed: that save is
   // followed by a scan of its own, so scan-on-save must not start a second.
   let savingAFix = false
@@ -65,16 +72,94 @@ function createController(vscode, context, dependencies = {}) {
     hint: vscode.DiagnosticSeverity.Hint,
   }
 
+  function located() {
+    // Where the scanner is is a user-level question, never a folder's.
+    return setup.locate(vscode.workspace.getConfiguration('sentinelforge'), {
+      extensionPath: context.extensionPath,
+      storagePath: context.globalStorageUri?.fsPath,
+    })
+  }
+
   function settings(folder) {
     // Scoped to the folder, so a multi-root workspace can exclude per folder.
     const configuration = vscode.workspace.getConfiguration('sentinelforge', folder?.uri)
     const seconds = Number(configuration.get('timeoutSeconds'))
+    const { pythonPath, backendPath } = located()
     return {
-      pythonPath: String(configuration.get('pythonPath') || 'python'),
-      backendPath: String(configuration.get('backendPath') || ''),
+      pythonPath: pythonPath || 'python',
+      backendPath,
       excludes: configuration.get('exclude') ?? [],
       timeoutMs: (Number.isFinite(seconds) && seconds >= 5 ? seconds : 120) * 1000,
     }
+  }
+
+  /** True when the scanner can be run; otherwise offers its one-time setup. */
+  async function ready() {
+    if (!located().needsSetup) return true
+    const message =
+      'SentinelForge needs a one-time setup: its scanner runs on your Python, with a few packages installed ' +
+      "into the extension's own folder."
+    status.text = `${IDLE_TEXT} $(warning)`
+    status.tooltip = message
+    const choice = await vscode.window.showWarningMessage(message, BUTTONS.SET_UP)
+    if (choice === BUTTONS.SET_UP) return setUp()
+    return false
+  }
+
+  /**
+   * Install the scanner's packages into a virtual environment of its own.
+   * Returns true when the scanner is ready to run.
+   */
+  async function setUp() {
+    const { backendPath } = located()
+    if (!backendPath) {
+      await vscode.window.showErrorMessage(
+        'SentinelForge: this copy of the extension has no scanner in it. Set sentinelforge.backendPath.',
+        BUTTONS.SETTINGS,
+      )
+      return false
+    }
+    if (settingUp) return false
+    const choice = await vscode.window.showInformationMessage(
+      'Set up the SentinelForge scanner?',
+      {
+        modal: true,
+        detail:
+          "This creates a Python environment in the extension's own storage folder and installs the scanner's " +
+          'packages into it from the Python Package Index (about 50 MB, a minute or two). Nothing is installed ' +
+          'into your own Python, and nothing in your workspace is run.',
+      },
+      BUTTONS.INSTALL,
+    )
+    if (choice !== BUTTONS.INSTALL) return false
+    settingUp = true
+    try {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'SentinelForge: setting up the scanner…' },
+        () =>
+          createEnvironment({
+            run: runProcess,
+            configuration: vscode.workspace.getConfiguration('sentinelforge'),
+            backendPath,
+            storagePath: context.globalStorageUri.fsPath,
+            log: (line) => line && output.appendLine(line),
+          }),
+      )
+    } catch (error) {
+      const message = error instanceof setup.SetupError ? error.message : `SentinelForge: ${error}`
+      output.appendLine(message)
+      if (error?.detail) output.appendLine(error.detail)
+      status.text = `${IDLE_TEXT} $(warning)`
+      status.tooltip = message
+      await vscode.window.showErrorMessage(message)
+      return false
+    } finally {
+      settingUp = false
+    }
+    output.appendLine('The scanner is set up.')
+    await vscode.window.showInformationMessage('SentinelForge: the scanner is set up. Scanning now.')
+    await scanWorkspace()
+    return true
   }
 
   function modelSettings(folder) {
@@ -150,6 +235,8 @@ function createController(vscode, context, dependencies = {}) {
       again = true
       return false
     }
+
+    if (!(await ready())) return false
 
     running = true
     status.text = `${IDLE_TEXT} $(sync~spin)`
@@ -384,6 +471,7 @@ function createController(vscode, context, dependencies = {}) {
     let result
     let document
     try {
+      if (!(await ready())) return false
       document = await vscode.workspace.openTextDocument(vscode.Uri.file(request.file))
       if (document.isDirty) {
         // The scanner reads the file on disk. A fix worked out from that would
@@ -443,6 +531,7 @@ function createController(vscode, context, dependencies = {}) {
     vscode.commands.registerCommand('sentinelforge.openReport', () => openReport()),
     vscode.commands.registerCommand('sentinelforge.clear', () => clear()),
     vscode.commands.registerCommand(FIX_COMMAND, (request) => fix(request)),
+    vscode.commands.registerCommand(SETUP_COMMAND, () => setUp()),
     vscode.languages.registerCodeActionsProvider(
       { scheme: 'file' },
       { provideCodeActions },
@@ -457,7 +546,7 @@ function createController(vscode, context, dependencies = {}) {
     { dispose: () => saveTimer !== null && clearTimer(saveTimer) },
   )
 
-  return { scanWorkspace, openReport, clear, onSave, fix, provideCodeActions }
+  return { scanWorkspace, openReport, clear, onSave, fix, provideCodeActions, setUp }
 }
 
 const GRADES = ['A', 'B', 'C', 'D', 'F']
@@ -484,6 +573,7 @@ module.exports = {
   IDLE_TEXT,
   PROPOSAL_SCHEME,
   SAVE_DEBOUNCE_MS,
+  SETUP_COMMAND,
   createController,
   merge,
 }

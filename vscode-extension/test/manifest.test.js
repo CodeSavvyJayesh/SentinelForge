@@ -21,7 +21,9 @@ const source = fs
 
 describe('the manifest', () => {
   it('declares every setting the extension reads', () => {
-    const read = new Set([...source.matchAll(/\.get\('([A-Za-z]+)'\)/g)].map((match) => match[1]))
+    const read = new Set(
+      [...source.matchAll(/(?:\.get\(|userValue\(configuration, )'([A-Za-z]+)'\)/g)].map((match) => match[1]),
+    )
 
     assert.ok(read.size >= 8)
     for (const key of read) assert.ok(properties[`sentinelforge.${key}`], `sentinelforge.${key} is not declared`)

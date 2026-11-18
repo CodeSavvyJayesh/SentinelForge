@@ -4,6 +4,12 @@
   "description": "Shows SentinelForge security findings on the lines they are on, and fixes them: built-in fixes or your local model, each checked by a re-scan before you apply it. Nothing in the workspace is executed.",
   "version": "0.2.0",
   "publisher": "CodeSavvyJayesh",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "homepage": "https://github.com/CodeSavvyJayesh/SentinelForge/tree/main/vscode-extension",
+  "bugs": {
+    "url": "https://github.com/CodeSavvyJayesh/SentinelForge/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/CodeSavvyJayesh/SentinelForge.git",
@@ -55,6 +61,11 @@
       {
         "command": "sentinelforge.fix",
         "title": "Fix finding",
+        "category": "SentinelForge"
+      },
+      {
+        "command": "sentinelforge.setup",
+        "title": "Set up the scanner",
         "category": "SentinelForge"
       }
     ],
@@ -134,6 +145,7 @@
     }
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "package": "node scripts/package.js"
   }
 }

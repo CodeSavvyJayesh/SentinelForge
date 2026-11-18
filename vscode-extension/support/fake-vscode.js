@@ -120,7 +120,7 @@ class FakeDocument {
   }
 }
 
-function createFakeVscode({ folders = ['/work/project'], configuration = {} } = {}) {
+function createFakeVscode({ folders = ['/work/project'], configuration = {}, extensionPath } = {}) {
   const state = {
     diagnostics: new Map(),
     clears: 0,
@@ -224,6 +224,8 @@ function createFakeVscode({ folders = ['/work/project'], configuration = {} } = 
             const perFolder = state.configuration.perFolder?.[scope?.fsPath]
             return perFolder && key in perFolder ? perFolder[key] : state.configuration[key]
           },
+          // Everything in the fake configuration counts as the user's own setting.
+          inspect: (key) => ({ globalValue: state.configuration[key] }),
         }
       },
       openTextDocument: async (target) => {
@@ -280,7 +282,7 @@ function createFakeVscode({ folders = ['/work/project'], configuration = {} } = 
     },
   }
 
-  const context = { subscriptions: [], globalStorageUri: Uri.file('/storage/sentinelforge') }
+  const context = { subscriptions: [], globalStorageUri: Uri.file('/storage/sentinelforge'), extensionPath }
 
   /** Put a file "on disk and open in the editor". Saving it fires the save listeners. */
   function addDocument(fsPath, text, options = {}) {

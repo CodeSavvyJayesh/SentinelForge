@@ -22,17 +22,45 @@ network connection, and nothing in the workspace is executed. Asking the local
 model for a fix sends the code around that finding to Ollama on your own
 machine, and nowhere else unless you allow it (see below).
 
-## Setting it up
+## Installing it
 
-The extension needs to know two things, both in your **user** settings
-(`Ctrl+,`, search for "SentinelForge"):
+**From the package** — anyone, no copy of this repository needed:
 
-| Setting | Example |
-| --- | --- |
-| `sentinelforge.backendPath` | `C:\SentinelForge\backend` |
-| `sentinelforge.pythonPath` | `C:\SentinelForge\backend\venv\Scripts\python.exe` |
+1. Install **Python 3.12 or newer** (python.org; on Windows tick "Add python.exe
+   to PATH").
+2. In VS Code: Extensions → `…` → **Install from VSIX…** → choose
+   `sentinelforge-0.2.0.vsix`. Or from a terminal:
+   `code --install-extension sentinelforge-0.2.0.vsix`
+3. Open a folder and run **SentinelForge: Scan workspace**. The first time, it
+   offers a **one-time setup**: it creates a Python environment in the
+   extension's own storage folder and installs the scanner's packages into it
+   from PyPI (about 50 MB, a minute or two, with your agreement). Nothing is
+   installed into your own Python.
 
-or in `settings.json`:
+The package carries the scanner itself. Its Python packages are not carried,
+because some are compiled separately for each platform.
+
+**Building the package** — from this folder, with Node.js only:
+
+```
+node scripts/package.js
+```
+
+writes `sentinelforge-<version>.vsix`. No `vsce` and no npm packages are needed.
+(`npx @vscode/vsce package` also works, if you prefer the official tool.)
+
+**From this repository** (developing the extension) — open the
+`vscode-extension` folder in VS Code and press `F5`, or run
+
+```
+code --extensionDevelopmentPath=C:\SentinelForge\vscode-extension C:\path\to\some\project
+```
+
+Run like this, the extension finds the repository's `backend` folder and its
+`venv` by itself. No settings are needed.
+
+**Your own copy of the scanner** — set both in your **user** settings, and they
+are always used:
 
 ```json
 {
@@ -41,33 +69,8 @@ or in `settings.json`:
 }
 ```
 
-These two can only be set in user settings. A workspace cannot set them — see
+These can only be set in user settings. A workspace cannot set them — see
 "Opening code you do not trust" below.
-
-## Running it
-
-**From a terminal** — the simplest way, and it needs nothing set up:
-
-```
-code --extensionDevelopmentPath=C:\SentinelForge\vscode-extension C:\path\to\some\project
-```
-
-A window opens on that project with the extension loaded.
-
-**While developing** — open the `vscode-extension` folder itself in VS Code (not
-the repository root) and press `F5`. A second window opens with the extension
-loaded; open any folder in it.
-
-**As an installed extension** — package it once, then install the file:
-
-```
-cd vscode-extension
-npx @vscode/vsce package
-code --install-extension sentinelforge-0.2.0.vsix
-```
-
-Then run **SentinelForge: Scan workspace** from the Command Palette
-(`Ctrl+Shift+P`).
 
 ## Fixing a finding
 
@@ -113,8 +116,8 @@ ollama pull qwen2.5-coder:7b
 
 | Setting | Default | |
 | --- | --- | --- |
-| `sentinelforge.backendPath` | — | SentinelForge's `backend` folder. User setting only |
-| `sentinelforge.pythonPath` | `python` | An interpreter with the backend's requirements. User setting only |
+| `sentinelforge.backendPath` | found automatically | SentinelForge's `backend` folder, to use your own copy of the scanner. User setting only |
+| `sentinelforge.pythonPath` | found automatically | An interpreter with the scanner's requirements. User setting only |
 | `sentinelforge.scanOnSave` | `false` | Scan again when a file is saved |
 | `sentinelforge.exclude` | `[]` | Paths or globs to leave out, e.g. `tests`, `*.min.js`. The number left out is shown in the status bar's tooltip |
 | `sentinelforge.timeoutSeconds` | `120` | Give up on a scan after this long |
@@ -142,6 +145,9 @@ not trust, so the extension is built for that case.
   a single token, so an exclusion pattern cannot turn into another option.
 - **A finding cannot be attached to a file outside the workspace.** Paths in
   the report are checked before they are used.
+- **The one-time setup installs only the scanner's pinned packages**, into the
+  extension's own storage folder, and only when you agree. Which Python it uses
+  comes from your user settings or the system, never from the workspace.
 - **The report is written to a temporary folder**, read, and deleted. A scan
   does not change the folder it scans.
 
