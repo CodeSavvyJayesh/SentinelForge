@@ -18,6 +18,126 @@ coin all score 0), averaged over categories:
 changed afterwards. The rest of this document is how those four numbers were
 obtained, what they do not show, and how to obtain them again.
 
+**Phase 19 changed the Java figure**, by giving Java the data-flow walk Python
+got in Phase 16. On the same held-out test cases, measured a second time and
+said so (below):
+
+| Benchmark | Phase 16 | Phase 19, same held-out cases |
+| --- | ---: | ---: |
+| OWASP Benchmark for Java 1.2 | **+33.5** | **+97.1** |
+
+## Phase 19: Java data flow
+
+### What changed
+
+Java files are now read into a syntax tree and walked method by method, with
+calls followed into other methods of the same file and of other files of the
+project (`backend/app/analysis/java_syntax.py`, `java_flow.py`,
+`java_analysis.py`; described in `docs/security/analysis.md`). From that walk:
+
+- six new rules, each reporting only when request data is shown to reach the
+  call: OS command (JV007), file path (JV008), LDAP filter (JV009), XPath
+  expression (JV010), the response page (JV011), the session (JV012);
+- a SQL001 report is **withdrawn** when every value joined into the query is
+  shown to be built from literals — `bar = "safe!"`, a map entry put in under a
+  different key, a branch arithmetic says is never taken;
+- a query that reaches the database without passing a line the pattern
+  reported (`"{call " + name + "}"`, `String.format`) is reported where it runs.
+
+Separately, the SQL pattern now counts SELECT as SQL only when what follows is
+shaped like a column list, which removes the HTML-tag and English-word false
+alarms recorded for Django below.
+
+### Results: held-out half, 1,389 test cases
+
+| Category | Cases | Phase 16: recall / false positives / score | Phase 19: recall / false positives / score | 95 % interval of the score |
+| --- | ---: | --- | --- | --- |
+| Command injection | 132 | 0.0 % / 0.0 % / 0.0 | 100.0 % / 0.0 % / +100.0 | +92.1 to +100.0 |
+| Weak cipher | 122 | 100.0 % / 0.0 % / +100.0 | 100.0 % / 0.0 % / +100.0 | +91.6 to +100.0 |
+| Weak hash | 131 | 68.0 % / 0.0 % / +68.0 | 68.0 % / 0.0 % / +68.0 | +55.1 to +77.5 |
+| LDAP injection | 24 | no rule | 100.0 % / 0.0 % / +100.0 | +65.5 to +100.0 |
+| Path traversal | 144 | no rule | 100.0 % / 0.0 % / +100.0 | +92.8 to +100.0 |
+| Insecure cookie | 32 | 100.0 % / 0.0 % / +100.0 | 100.0 % / 0.0 % / +100.0 | +72.5 to +100.0 |
+| SQL injection | 255 | 90.2 % / 89.3 % / +0.9 | 100.0 % / 0.0 % / +100.0 | +95.8 to +100.0 |
+| Trust boundary | 69 | no rule | 100.0 % / 0.0 % / +100.0 | +82.3 to +100.0 |
+| Weak randomness | 239 | 100.0 % / 0.0 % / +100.0 | 100.0 % / 0.0 % / +100.0 | +95.5 to +100.0 |
+| XPath injection | 13 | no rule | 100.0 % / 0.0 % / +100.0 | +42.6 to +100.0 |
+| Cross-site scripting | 228 | no rule | 100.0 % / 0.0 % / +100.0 | +95.4 to +100.0 |
+| **Average over categories** | | 41.7 % / 8.1 % / **+33.5** | 97.1 % / 0.0 % / **+97.1** | |
+
+Counting every test case once: 681 true positives, 24 misses, **no false
+alarms**, 684 correct silences — recall 96.6 %, precision 100 %, F1 98.3 %.
+Against the Phase 16 analyser on the same cases: 422 judged correctly that were
+wrong before, none judged wrongly that were right before (exact McNemar test,
+p = 2 × 10⁻¹²⁷). All 24 misses are weak hashes whose algorithm is read from a
+properties file, as before.
+
+The development half scores +97.3 averaged over categories (all test cases:
+recall 97.7 %, no false alarms). The held-out half is within a point of it,
+which says the rules were not fitted to the cases they were written against —
+and nothing more than that; see the first caveat below.
+
+Recorded in `results/java-flow/`. The Python results are unchanged by this
+phase: the development half was re-run and reproduced its record exactly.
+
+### The held-out half was measured a second time
+
+Phase 16 measured it once and stated that changing a rule afterwards would
+mean measuring it again. This is that second measurement, and it is the only
+one. Every change in this phase was made while looking at the development half
+only: its test cases were copied to a separate folder before any was read, and
+the held-out files were not opened. The analyser was frozen (source hash
+`6b374566…`) before the held-out half was run, and it has not been changed
+since.
+
+What a second use costs: a split guards against fitting rules to cases, and
+each measurement that decides whether work continues spends some of that
+guarantee. This one decided nothing — it was run after the work was finished,
+and its result is reported whatever it was.
+
+### What this does and does not show
+
+- **The benchmark is generated from templates, and the walk was written while
+  reading them.** Every safe Java test case is safe for one of a handful of
+  reasons — a constant put in a map under another key, a list element removed,
+  a condition decided by arithmetic, a switch on a known character, a helper
+  that returns a literal. The walk understands each of those, and the held-out
+  half uses the same templates. A score near +100 on this benchmark is what a
+  correct implementation of those ideas earns; it is not evidence about code
+  written in other ways. The real-project reading below is the only evidence
+  for that.
+- **"Request data" is the servlet request and Spring's request annotations.**
+  A framework the walk does not know (JAX-RS, Struts, Play) contributes nothing
+  it can follow, and its weaknesses are missed.
+- **Unknown calls pass their arguments through.** A library call the walk has
+  no model for returns request data if it was given any. That is the usual
+  assumption of taint tracking, and it is how data is carried through
+  `URLDecoder.decode` or Base64; it is also how a value that a library really
+  does clean is reported anyway.
+- **A static library call given only literals counts as constant.**
+  `System.getProperty("user.dir")` is configuration, not request data, so a
+  query joined to it would be withdrawn. Withdrawing is the direction that can
+  hide something; this is the case where it could.
+
+### Checked on code that is not the benchmark
+
+The Phase 16 analyser and this one, on the same projects at the same commits,
+with every finding that appeared or disappeared read:
+
+| Project (commit) | Findings before → after | What changed |
+| --- | ---: | --- |
+| WebGoat (`3284a8e466df`), deliberately vulnerable | 64 → 72 | **Nine new, all real:** the path-traversal lesson (`new File(dir, id + ".jpg")` from a request parameter), both lines of the zip-slip lesson, three lines of WebWolf's upload that use the client's file name, and three SQL lessons that run a whole query taken from `@RequestParam`. **One withdrawn:** a test's attack payload joined to the constant `"deletingTom"`. A query built in one method and run in another is reported once, where it is built. |
+| Spring Framework (`9a156f878af1`, 11,353 files), not vulnerable | 66 → 69 | **Eleven new**, all in one test file: test controllers that write `@RequestParam` values straight into the response. Correct by the rule's definition, and not vulnerabilities in Spring. **Eight withdrawn:** seven `<select>` HTML tags in tag-library tests and the English "Unable to select a bean". Three sequence queries (`"select next value for " + name`) were dropped by the first version of the stricter SELECT and are kept by the final one. |
+| Django (`a461af8ce487`) | 270 → 266 | The four JavaScript false alarms recorded below — `<select id='`, `closest("select")`, "You can only select", select2's messages — are gone. Nothing else changed. |
+| Juice Shop (`1618a611b173`) | 227 → 227 | Unchanged. |
+
+Scanning time: Spring Framework took about 46 % longer on this machine
+(21.5 s → 31.5 s). A file is walked only if it names a servlet request or a
+Spring request annotation, or has a SQL report to check; only methods that can
+see the request are starting points; and other files are parsed only when a
+call reaches one of their classes. Before those three changes the same scan
+took three times as long.
+
 ## What was measured
 
 Two public benchmarks from the OWASP Benchmark project. Each is a web
@@ -212,13 +332,13 @@ three seconds), and a crash in the flow walk on a function that never returns
 over about 5,600 Python files — the standard library, Django, Flask and PyGoat
 — without an error.
 
-Two of the false alarms above are the SQL rule's and are still there. It
-reports a string that starts like a statement and is joined to a value, and
-`"<select id='" + name` starts like one. Django's bundled admin scripts hold
-four such lines; the earlier rule reported two of them and this one reports
-all four. This was found after the held-out measurement, so it is recorded
-rather than fixed: changing the rule now would mean measuring the held-out
-half a second time.
+Two of the false alarms above are the SQL rule's. It reported a string that
+starts like a statement and is joined to a value, and `"<select id='" + name`
+starts like one. Django's bundled admin scripts hold four such lines; the
+earlier rule reported two of them and this one reported all four. This was
+found after the held-out measurement, so it was recorded rather than fixed
+here. **Phase 19 fixed it** and measured the held-out half a second time
+(above).
 
 ## What these numbers do not show
 
@@ -235,7 +355,8 @@ half a second time.
   The analyser's idea of "request data" is Flask's and Django's request
   objects and route parameters; a framework it does not know contributes
   nothing it can follow.
-- **The flow walk stays inside one file.** Some test cases read the request
+- **The Python flow walk stays inside one file.** (The Java walk, added in
+  Phase 19, follows calls into other files.) Some test cases read the request
   through a helper class in another file. The analyser treats what that helper
   returns as *not known*. That choice was made deliberately after reading
   Django, where assuming "anything given the request returns request data"

@@ -220,11 +220,12 @@ See [running with Docker](docs/devsecops/docker.md).
 | 16 | Research evaluation (benchmark with known answers, data flow for Python, patch-outcome classifier) | ✅ Done |
 | 17 | Fixes in VS Code and on the command line (built-in fixes and the local model, each re-scanned) | ✅ Done |
 | 18 | Release readiness (installable extension package, one-time scanner setup, one-command classifier training) | ✅ Done |
+| 19 | Data flow for Java (six new rules, SQL reports on constants withdrawn; Java benchmark +33.5 → +97.1) | ✅ Done |
 
 ## Limitations (current)
 
-- Request data is followed to the call it reaches **for Python only, and inside one file**. For Java, JavaScript, PHP and Go the rules are still local: a finding says "this call is dangerous", not "user input reaches it".
-- Measured on the OWASP benchmarks, on test cases the rules were never tuned on, the analyser scores **+88 out of 100 for Python and +33 for Java** (recall minus false positive rate, averaged over categories). Java has no rule at all for five of the benchmark's eleven categories, and its SQL-injection rule cannot tell an injectable query from a safe one. These are results on generated test cases, not on real projects; see [the evaluation](docs/evaluation/README.md) for what they do and do not show.
+- Request data is followed to the call it reaches **for Python (inside one file) and Java (across files)**. For JavaScript, PHP and Go the rules are still local: a finding says "this call is dangerous", not "user input reaches it". For Java, "request data" means the servlet request and Spring's request parameters; other frameworks contribute nothing the walk recognises.
+- Measured on the OWASP benchmarks, on test cases the rules were never tuned on, the analyser scores **+88 out of 100 for Python and +97 for Java** (recall minus false positive rate, averaged over categories; the Java held-out half was measured a second time, after Phase 19, and that is disclosed). The benchmarks are generated from templates and the Java walk was written while reading them, so these are results on generated test cases, not on real projects; see [the evaluation](docs/evaluation/README.md) for what they do and do not show.
 - The patch-outcome classifier has a training pipeline and **no result**: it needs fixes that were proposed and checked on a real installation, and refuses to train on fewer than 60. `.\scripts\train-classifier.ps1` collects them and trains in one command, but it takes hours on a CPU. The application does not use it to decide anything.
 - "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
 - Scans run in the background on the API machine. Workers on other machines, and scheduled scans, are not built yet.
@@ -329,3 +330,4 @@ See [running with Docker](docs/devsecops/docker.md).
 - [Phase 16 report](docs/development/phases/phase-16-evaluation.md)
 - [Phase 17 report](docs/development/phases/phase-17-vscode-fixes.md)
 - [Phase 18 report](docs/development/phases/phase-18-release.md)
+- [Phase 19 report](docs/development/phases/phase-19-java-flow.md)

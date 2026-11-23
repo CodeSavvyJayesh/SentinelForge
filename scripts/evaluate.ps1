@@ -4,8 +4,9 @@
 #
 # Downloads the two OWASP benchmarks at the exact commits the results were
 # recorded against, marks the analyser against each, and compares every result
-# with the one in docs\evaluation\results\improved. Nothing in a benchmark is
-# built or run: its files are only read.
+# with the one recorded under docs\evaluation\results (Java: java-flow, from
+# Phase 19; Python: improved, from Phase 16). Nothing in a benchmark is built or
+# run: its files are only read.
 #
 # The benchmarks are kept OUTSIDE this repository (by default in a folder next
 # to it), because they are several thousand files of deliberately vulnerable
@@ -19,7 +20,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root "backend"
 $python = Join-Path $backend "venv\Scripts\python.exe"
-$recorded = Join-Path $root "docs\evaluation\results\improved"
+$results = Join-Path $root "docs\evaluation\results"
 if (-not $Folder) {
     $Folder = Join-Path (Split-Path -Parent $root) "sentinelforge-benchmarks"
 }
@@ -29,14 +30,14 @@ $benchmarks = @(
         Name   = "BenchmarkJava"
         Url    = "https://github.com/OWASP-Benchmark/BenchmarkJava"
         Commit = "8b67a88d73b2594570fc21150705283de884620b"
-        Record = "owasp-java"
+        Record = "java-flow\owasp-java"
         Title  = "OWASP Benchmark for Java"
     },
     @{
         Name   = "BenchmarkPython"
         Url    = "https://github.com/OWASP-Benchmark/BenchmarkPython"
         Commit = "f1291485808b66e20ddb6b01b10dc71b3df8c8ba"
-        Record = "owasp-python"
+        Record = "improved\owasp-python"
         Title  = "OWASP Benchmark for Python"
     }
 )
@@ -91,7 +92,7 @@ foreach ($benchmark in $benchmarks) {
     }
     $target = Join-Path $Folder $benchmark.Name
     foreach ($split in @("held-out", "development", "all")) {
-        $record = Join-Path $recorded ($benchmark.Record + "-" + $split + ".json")
+        $record = Join-Path $results ($benchmark.Record + "-" + $split + ".json")
         $label = $benchmark.Title + " (" + $split + ")"
         Push-Location $backend
         try {

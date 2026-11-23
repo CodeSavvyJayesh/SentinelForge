@@ -231,4 +231,93 @@ is joined to a value. The evaluation shows precisely what that is worth
 without data flow: it finds 90 % of the injectable queries in the Java
 benchmark and reports 89 % of the safe ones as well. It also still mistakes
 `"<select id='" + name` in JavaScript for SQL. Both are recorded in the
-evaluation rather than hidden.
+evaluation rather than hidden. (Phase 19, below, addressed both.)
+
+## Following request data through Java (Phase 19)
+
+Java gets the same idea as Python, with one difference forced on it: Python has
+`ast.parse` in its standard library and Java has nothing comparable available
+to a Python program. Rather than add a dependency, the project reads Java
+itself (`java_syntax.py`, about 1,350 lines): classes, fields, methods,
+statements and expressions. What it does not understand — lambdas, switch
+expressions, anonymous class bodies, local classes — becomes an *opaque*
+value. A method body it cannot read is skipped and marked unread; a file it
+cannot read keeps exactly the findings the patterns gave it. On Spring
+Framework's 11,000 Java files it reads all but one file and 8 of 98,000 method
+bodies.
+
+### What a value is
+
+`java_flow.py` describes every value with: whether **request data** reaches
+it; which kinds of use it has been **escaped** for; whether its origin is
+**not known**; the constants it can be, when there are few enough to list; the
+elements of a list or array and the entries of a map, when they are known one
+by one; a bean's properties (`setPath(x)` is what `getPath()` returns); and
+what sort of object it is (the request, the response writer, a session, a
+statement, a directory context, an XPath, a process).
+
+Request data enters through a parameter typed `HttpServletRequest` (and the
+reads that return client data: parameters, headers, cookies, the query string,
+the URI, the body) and through parameters Spring fills from the request
+(`@RequestParam`, `@PathVariable`, `@RequestHeader`, `@CookieValue`,
+`@RequestBody`). Nothing else is request data.
+
+### The asymmetry that makes it safe
+
+The walk is used in two directions, and both need a positive reason:
+
+| To | It must show | What it does when it does not know |
+| --- | --- | --- |
+| **Add** a finding (JV007–JV012, SQL001 at a sink) | request data, read in this project, reaches the call unescaped for that use | adds nothing |
+| **Withdraw** a SQL001 finding | every value joined into the query is built only from literals | leaves the finding |
+
+A gap in the walk can therefore cost a finding it might have added. It cannot
+hide one the pattern made. A method the walk ran out of budget on contributes
+neither.
+
+### What it understands
+
+- Statements: declarations, assignment, `if`/`else`, `switch` (with fall
+  through), loops (read until nothing changes, at most three times), `try`,
+  `catch`, `finally`, `return`, `break`, `continue`, `throw`.
+- Conditions it can decide: arithmetic and comparisons on known numbers, so
+  `(7 * 18) + num > 200` with `num = 106` takes only one branch; a `switch` on
+  `"ABC".charAt(1)` takes only `case 'B'`.
+- Collections: `add`, `add(i, x)`, `remove(i)`, `get(i)`, `set` on lists and
+  arrays; `put`, `get`, `getOrDefault`, `remove` on maps with literal keys.
+- Strings and builders: `+` (numbers add, anything joined to text is text),
+  `StringBuilder.append`, `substring`, `charAt`, `toUpperCase` and friends on
+  known text; everything else passes its inputs through.
+- Escaping: ESAPI's `encodeFor*`, Spring's `HtmlUtils.htmlEscape`, Commons
+  Lang's `escapeHtml`/`escapeSql`, the OWASP encoder's `Encode.forHtml`. Each
+  makes a value safe for its own kind of use only; escaped text joined to
+  unescaped text is not escaped.
+- Calls: into a method of the same class or an enclosing one, into a nested
+  class, into another file's class by its declared type (an interface is
+  followed into every class that implements it, if there are at most eight),
+  and into a constructor. Recursion and calls more than four deep return the
+  library assumption below.
+- Library calls: what a call nothing is known about returns comes from what it
+  was given. That is how data travels through `URLDecoder.decode`, Base64 and
+  a cookie's `getValue()`.
+
+### Where it stops
+
+- **Fields are not followed** beyond static constants, request-typed fields,
+  and bean properties set and read in the same method. A value stored in a
+  field by one method and read by another is *not known*.
+- **Only the request is a source.** A value read from a database, a file or a
+  message queue is not request data, though it may be attacker-controlled.
+- **A static library call given only literals is constant.**
+  `System.getProperty("user.dir")` is configuration; a query joined to it is
+  withdrawn. This is the one place withdrawal rests on an assumption.
+- **Kotlin and Scala** are still read with patterns only.
+
+### What it costs
+
+A file is walked only if it mentions a servlet request or a Spring request
+annotation, or has a SQL report to check. Inside it, only methods that can see
+the request (a request parameter, a Spring request parameter, a request field)
+are starting points; their callees are followed from there. Other files are
+indexed with a regular expression and parsed only when a call reaches one of
+their classes. On Spring Framework a whole scan went from 21.5 to 31.5 seconds.
