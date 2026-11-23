@@ -48,3 +48,6 @@ backend/workspaces/
 knowledge-sources/
 # The embedding model, downloaded once and cached on first use.
 backend/models/
+
+# Packaged VS Code extension
+*.vsix

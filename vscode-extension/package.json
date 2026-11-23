@@ -1,9 +1,15 @@
 {
   "name": "sentinelforge",
   "displayName": "SentinelForge",
-  "description": "Shows SentinelForge security findings on the lines they are on. Runs the scanner locally; nothing in the workspace is executed.",
-  "version": "0.1.0",
+  "description": "Shows SentinelForge security findings on the lines they are on, and fixes them: built-in fixes or your local model, each checked by a re-scan before you apply it. Nothing in the workspace is executed.",
+  "version": "0.2.0",
   "publisher": "CodeSavvyJayesh",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "homepage": "https://github.com/CodeSavvyJayesh/SentinelForge/tree/main/vscode-extension",
+  "bugs": {
+    "url": "https://github.com/CodeSavvyJayesh/SentinelForge/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/CodeSavvyJayesh/SentinelForge.git",
@@ -51,6 +57,16 @@
         "command": "sentinelforge.clear",
         "title": "Clear findings",
         "category": "SentinelForge"
+      },
+      {
+        "command": "sentinelforge.fix",
+        "title": "Fix finding",
+        "category": "SentinelForge"
+      },
+      {
+        "command": "sentinelforge.setup",
+        "title": "Set up the scanner",
+        "category": "SentinelForge"
       }
     ],
     "configuration": {
@@ -90,11 +106,46 @@
           "maximum": 1800,
           "scope": "machine",
           "description": "Give up on a scan after this many seconds."
+        },
+        "sentinelforge.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "scope": "machine",
+          "markdownDescription": "Where your local Ollama is, for **Ask the local model for a fix**. **User setting only**: a workspace cannot set this, because the code around a finding is sent there."
+        },
+        "sentinelforge.model": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "scope": "machine",
+          "markdownDescription": "The Ollama model that proposes fixes. It must be pulled first: `ollama pull qwen2.5-coder:7b`."
+        },
+        "sentinelforge.modelTimeoutSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "maximum": 1800,
+          "scope": "machine",
+          "description": "Give up on the local model after this many seconds. A 7B model on a CPU can take a minute or more."
+        },
+        "sentinelforge.allowRemoteModel": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Allow `sentinelforge.ollamaUrl` to point at another machine. Off by default: asking for a fix sends the code around the finding to the model. **User setting only.**"
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sentinelforge.fix",
+          "when": "false"
+        }
+      ]
     }
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "package": "node scripts/package.js"
   }
 }

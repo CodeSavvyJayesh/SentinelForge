@@ -10,13 +10,16 @@ from pathlib import Path
 
 import pytest
 
+from app.analysis.findings import SNIPPET_MAX_CHARS, clean_snippet
 from app.patching.region import (
     MAX_LINE_CHARS,
     REPLACE_END,
     REPLACE_START,
+    Region,
     RegionError,
     read_region,
     splice,
+    still_holds,
 )
 
 SOURCE = """\
@@ -302,3 +305,65 @@ def test_splicing_a_dedented_python_fix_still_parses(tmp_path: Path) -> None:
 
     assert changed is True
     ast.parse("".join(after))  # would raise before the fix
+
+
+# --- is this still the code the finding was made on? ------------------------
+
+
+def region_of(tmp_path: Path, text: str, line: int) -> Region:
+    (tmp_path / "ws").mkdir(exist_ok=True)
+    (tmp_path / "ws" / "a.py").write_bytes(text.encode("utf-8"))
+    return read_region(tmp_path / "ws", "a.py", line, line)
+
+
+def test_a_region_holding_the_recorded_line_still_holds(tmp_path: Path) -> None:
+    region = region_of(tmp_path, "import os\n    os.system(command)\n", 2)
+
+    assert still_holds(region, "os.system(command)") is True
+
+
+def test_a_region_whose_line_has_moved_does_not_hold(tmp_path: Path) -> None:
+    # Somebody added an import; line 2 is not the call any more.
+    region = region_of(tmp_path, "import os\nimport sys\n    os.system(command)\n", 2)
+
+    assert still_holds(region, "os.system(command)") is False
+
+
+def test_a_finding_recorded_without_a_snippet_cannot_be_compared(tmp_path: Path) -> None:
+    region = region_of(tmp_path, "x = 1\n", 1)
+
+    assert still_holds(region, "") is True
+    assert still_holds(region, None) is True
+
+
+def test_a_long_line_is_compared_by_the_part_of_it_that_was_stored(tmp_path: Path) -> None:
+    """A snippet is cut at 240 characters and given an ellipsis.
+
+    The file never contained that ellipsis, so comparing the stored text as it
+    stands refused every finding on a long line as "the code has changed".
+    """
+    line = "    cursor.execute(" + " + ".join(f'"part {number} "' for number in range(40)) + ")"
+    assert len(line) > SNIPPET_MAX_CHARS
+    region = region_of(tmp_path, f"def run(cursor):\n{line}\n", 2)
+    stored = clean_snippet(line)
+    assert stored.endswith("…")
+
+    assert still_holds(region, stored) is True
+    assert still_holds(region, clean_snippet(line.replace("part 3 ", "part three "))) is False
+
+
+def test_only_a_snippet_that_was_cut_short_has_its_ellipsis_ignored(tmp_path: Path) -> None:
+    # This snippet is short, so its ellipsis is part of what the line said.
+    # The file says something else now.
+    region = region_of(tmp_path, 'label = "loading"\n', 1)
+
+    assert still_holds(region, 'label = "loading…') is False
+
+
+def test_control_characters_removed_from_the_snippet_are_ignored_in_the_file(
+    tmp_path: Path,
+) -> None:
+    line = 'beep = "\x07" + os.popen(command).read()'
+    region = region_of(tmp_path, f"import os\n{line}\n", 2)
+
+    assert still_holds(region, clean_snippet(line)) is True

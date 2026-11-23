@@ -319,6 +319,110 @@ def test_fixing_the_other_identical_line_does_not_count_twice(tmp_path: Path) ->
     assert outcome_of("target_resolved", outcome) == FAILED
 
 
+# --- a line with more than one thing wrong with it ---------------------------
+
+SHARED = """\
+import hashlib
+import os
+
+
+def checksum(command):
+    return hashlib.md5(os.popen(command).read().encode()).hexdigest()
+"""
+
+
+def detail_of(check_key: str, outcome: Outcome) -> str:
+    return next(check.detail for check in outcome.checks if check.key == check_key)
+
+
+def test_fixing_one_of_two_findings_on_a_line_is_not_a_new_finding(tmp_path: Path) -> None:
+    """The command injection is on the same line as the weak hash.
+
+    Fix the hash and that line reads differently, so the injection comes back
+    from the re-scan with different text — and a comparison by text alone would
+    call it new and refuse every fix on a line like this one. It was there
+    before, there is still exactly one of it, and it is not what was asked
+    about.
+    """
+    root = workspace(tmp_path, {"app.py": SHARED})
+    diff = diff_for(root, "app.py", "hashlib.md5", "hashlib.sha256")
+
+    outcome = run(root, "app.py", diff, "PY007")
+
+    assert outcome.passed
+    assert outcome.new_findings == []
+    assert outcome.also_resolved == 0
+    assert (outcome.findings_before, outcome.findings_after) == (2, 1)
+    # And the reader is told, beside the word "passed", that the line is not clean.
+    assert "still has its other finding (PY003)" in detail_of("no_new_findings", outcome)
+
+
+def test_a_clean_pass_does_not_mention_other_findings(tmp_path: Path) -> None:
+    root = workspace(tmp_path, {"app.py": PYTHON})
+    diff = diff_for(root, "app.py", "hashlib.md5", "hashlib.sha256")
+
+    outcome = run(root, "app.py", diff, "PY007")
+
+    assert detail_of("no_new_findings", outcome) == (
+        "The re-scan detects nothing that was not there before."
+    )
+
+
+def test_a_second_finding_of_the_other_rule_is_still_new(tmp_path: Path) -> None:
+    """One command injection before, two after: the count is what went up."""
+    root = workspace(tmp_path, {"app.py": SHARED})
+    diff = diff_for(
+        root,
+        "app.py",
+        "    return hashlib.md5(os.popen(command).read().encode()).hexdigest()\n",
+        "    os.popen(command + ' --log')\n"
+        "    return hashlib.sha256(os.popen(command).read().encode()).hexdigest()\n",
+    )
+
+    outcome = run(root, "app.py", diff, "PY007")
+
+    assert outcome_of("target_resolved", outcome) == PASSED
+    assert outcome_of("no_new_findings", outcome) == FAILED
+    assert "introduces 1 finding that" in detail_of("no_new_findings", outcome)
+    assert {item["rule_id"] for item in outcome.new_findings} == {"PY003"}
+
+
+def test_removing_the_other_finding_as_well_is_counted_once(tmp_path: Path) -> None:
+    root = workspace(tmp_path, {"app.py": SHARED})
+    diff = diff_for(
+        root,
+        "app.py",
+        "hashlib.md5(os.popen(command).read().encode())",
+        "hashlib.sha256(command.encode())",
+    )
+
+    outcome = run(root, "app.py", diff, "PY007")
+
+    assert outcome.passed
+    assert outcome.also_resolved == 1
+    assert outcome.findings_after == 0
+
+
+def test_the_other_finding_fixed_while_the_target_is_reworded_is_still_rejected(
+    tmp_path: Path,
+) -> None:
+    """Asked about the injection; the change turns MD5 into SHA-1 on the way.
+
+    The weak hash was not the target, there is still one of it, and so it is
+    not new. This is the case the count exists for — and the target's own
+    check is what decides the verdict.
+    """
+    root = workspace(tmp_path, {"app.py": SHARED})
+    diff = diff_for(root, "app.py", "hashlib.md5", "hashlib.sha1")
+
+    outcome = run(root, "app.py", diff, "PY003")
+
+    # The command is exactly as it was, on a line that now reads differently.
+    assert outcome_of("target_resolved", outcome) == PASSED
+    assert outcome_of("no_new_findings", outcome) == FAILED
+    assert "PY003 still fires on the changed code" in detail_of("no_new_findings", outcome)
+
+
 # --- could not be judged at all --------------------------------------------
 
 

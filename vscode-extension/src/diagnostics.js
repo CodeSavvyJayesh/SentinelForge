@@ -9,6 +9,8 @@
  * and a file path in it is a string a repository chose.
  */
 
+const { fixInfoFor } = require('./fixes')
+
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
 
 /** Editor severities, by name. The extension maps these onto vscode's enum. */
@@ -95,6 +97,10 @@ function isInteger(value) {
  * Returns `{ files: Map<key, { segments, items }>, skipped }`. A finding with
  * a path that is not safely inside the workspace, or without a usable line, is
  * counted in `skipped` rather than shown somewhere it does not belong.
+ *
+ * Each item also says what fix it can be offered (`fix`), taken from the
+ * finding's fingerprint and the report's own list of rules with a built-in
+ * fix. A report from a scanner too old to send either simply offers none.
  */
 function toDiagnostics(report) {
   const fixNotes = new Map()
@@ -125,6 +131,8 @@ function toDiagnostics(report) {
       code: oneLine(finding.rule_id) || 'finding',
       codeUrl: cweUrl(finding.cwe_id),
       source: SOURCE,
+      // What can be offered for this finding, or null: see fixes.js.
+      fix: fixInfoFor(finding, report.quick_fixes),
     })
   }
   return { files, skipped }

@@ -21,6 +21,8 @@ Nothing here writes to the workspace. A proposal is text until Phase 11.
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.analysis.findings import CONTROL_CHARACTERS, SNIPPET_MAX_CHARS
+
 # How much unchanged code the model sees around the finding. Enough to know
 # what the surrounding function is doing and what names are in scope; small
 # enough that a CPU generation stays in tens of seconds rather than minutes.
@@ -170,6 +172,27 @@ def read_region(
     )
 
 
+def still_holds(region: Region, snippet: str | None) -> bool:
+    """Whether a region is still the code its finding was recorded on.
+
+    Without this check, a file edited after a scan produces a change worked out
+    against lines that have shifted: it would apply cleanly and alter the wrong
+    code, which is the worst outcome available here.
+
+    The comparison undoes exactly what was done to the line when it was stored
+    as a snippet — control characters removed, and a long line cut short with
+    an ellipsis — so that a long line is compared by the part of it that was
+    kept, rather than refused for ending in a character the file never had.
+    """
+    lines = (snippet or "").strip().splitlines()
+    if not lines:
+        return True  # nothing was recorded to compare with
+    first = lines[0].strip()
+    if len(first) == SNIPPET_MAX_CHARS + 1 and first.endswith("…"):
+        first = first[:-1].rstrip()
+    return first in CONTROL_CHARACTERS.sub("", region.text)
+
+
 def reindent(replacement: str, original: list[str]) -> tuple[str, bool]:
     """Put the replacement back at the indentation of the code it replaces.
 
@@ -261,4 +284,5 @@ __all__ = [
     "read_region",
     "reindent",
     "splice",
+    "still_holds",
 ]

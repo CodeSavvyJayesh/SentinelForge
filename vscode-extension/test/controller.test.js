@@ -4,9 +4,12 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { describe, it } = require('node:test')
 
-const { IDLE_TEXT, createController, merge } = require('../src/controller')
-const { ScanError } = require('../src/scanner')
+const { ASK_MODEL_TITLE, BUTTONS, FIX_COMMAND, IDLE_TEXT, PROPOSAL_SCHEME, createController, merge } = require('../src/controller')
+const { FixError, ScanError } = require('../src/scanner')
+const { parseFixResult } = require('../src/fixes')
 const { createFakeVscode } = require('../support/fake-vscode')
+const fs = require('node:fs')
+const os = require('node:os')
 
 function finding(overrides = {}) {
   return {
@@ -48,12 +51,15 @@ function fakeScanner(...results) {
   return { scan, calls }
 }
 
-function setup({ results = [{ report: report(), excluded: 0 }], ...options } = {}) {
+function setup({ results = [{ report: report(), excluded: 0 }], fixResults = [], createEnvironment, ...options } = {}) {
   const fake = createFakeVscode(options)
   const scanner = fakeScanner(...results)
+  const fixer = fakeScanner(...fixResults)
   const timers = []
   const controller = createController(fake.vscode, fake.context, {
     scan: scanner.scan,
+    fix: fixer.scan,
+    createEnvironment,
     setTimeout: (callback, delay) => {
       const timer = { callback, delay, cleared: false }
       timers.push(timer)
@@ -63,11 +69,11 @@ function setup({ results = [{ report: report(), excluded: 0 }], ...options } = {
       timer.cleared = true
     },
   })
-  return { ...fake, controller, scanner, timers }
+  return { ...fake, controller, scanner, fixer, timers }
 }
 
 describe('activation', () => {
-  it('shows a status bar item that scans when clicked, and registers three commands', () => {
+  it('shows a status bar item that scans when clicked, and registers its commands', () => {
     const { state } = setup()
 
     assert.equal(state.status.shown, true)
@@ -75,8 +81,10 @@ describe('activation', () => {
     assert.equal(state.status.command, 'sentinelforge.scanWorkspace')
     assert.deepEqual([...state.commands.keys()].sort(), [
       'sentinelforge.clear',
+      'sentinelforge.fix',
       'sentinelforge.openReport',
       'sentinelforge.scanWorkspace',
+      'sentinelforge.setup',
     ])
   })
 
@@ -381,5 +389,423 @@ describe('merge', () => {
       counts_by_severity: { HIGH: 3 },
       scan: { truncated: true },
     })
+  })
+})
+
+// --- fixes -------------------------------------------------------------------
+
+const FILE = path.join('/work/project', 'app', 'main.py')
+const FIXABLE = 'f'.repeat(64)
+const SOURCE = 'import hashlib\n\n\ndef digest(value):\n    return hashlib.md5(value).hexdigest()\n'
+const HASH_FINDING = finding({
+  rule_id: 'PY007',
+  title: 'Weak hash algorithm (MD5 or SHA-1)',
+  severity: 'MEDIUM',
+  cwe_id: 'CWE-327',
+  file_path: 'app/main.py',
+  line_start: 5,
+  line_end: 5,
+  fingerprint: FIXABLE,
+})
+const FIXABLE_REPORT = report([HASH_FINDING], { quick_fixes: { PY007: 'Use SHA-256 instead of a broken hash' } })
+
+function verified(overrides = {}) {
+  return parseFixResult({
+    schema: 1,
+    status: 'verified',
+    source: 'builtin',
+    title: 'Use SHA-256 instead of a broken hash',
+    rationale: 'MD5 is collision-broken.',
+    caution: 'Old digests will not match.',
+    edits: [
+      {
+        first_line: 5,
+        last_line: 5,
+        old: ['    return hashlib.md5(value).hexdigest()\n'],
+        new: ['    return hashlib.sha256(value).hexdigest()\n'],
+      },
+    ],
+    ...overrides,
+  })
+}
+
+/** A workspace with one scanned, fixable finding, and the file open in the editor. */
+async function scanned(options = {}) {
+  const context = setup({ results: [{ report: FIXABLE_REPORT, excluded: 0 }], ...options })
+  const document = context.addDocument(FILE, SOURCE, options.document)
+  await context.controller.scanWorkspace()
+  const diagnostic = context.state.diagnostics.get(FILE)[0]
+  const actions = context.controller.provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic] })
+  return { ...context, document, diagnostic, actions }
+}
+
+describe('quick fixes', () => {
+  it('registers a quick-fix provider for files, and a read-only view for proposals', () => {
+    const { state } = setup()
+
+    assert.equal(state.codeActionProviders.length, 1)
+    assert.deepEqual(state.codeActionProviders[0].selector, { scheme: 'file' })
+    assert.deepEqual(state.codeActionProviders[0].metadata.providedCodeActionKinds, ['quickfix'])
+    assert.ok(state.contentProviders.has(PROPOSAL_SCHEME))
+  })
+
+  it('offers the built-in fix first, and the local model as well', async () => {
+    const { actions, diagnostic } = await scanned()
+
+    assert.deepEqual(
+      actions.map((action) => [action.title, action.isPreferred]),
+      [
+        ['SentinelForge: Use SHA-256 instead of a broken hash', true],
+        [ASK_MODEL_TITLE, false],
+      ],
+    )
+    assert.deepEqual(actions[0].diagnostics, [diagnostic])
+    assert.equal(actions[0].command.command, FIX_COMMAND)
+    assert.deepEqual(actions[0].command.arguments, [
+      { folder: '/work/project', file: FILE, fingerprint: FIXABLE, mode: 'builtin' },
+    ])
+    assert.equal(actions[1].command.arguments[0].mode, 'model')
+  })
+
+  it('offers only the model for a rule without a built-in fix', async () => {
+    const context = setup({ results: [{ report: report([{ ...HASH_FINDING, rule_id: 'PY010' }]), excluded: 0 }] })
+    const document = context.addDocument(FILE, SOURCE)
+    await context.controller.scanWorkspace()
+    const diagnostic = context.state.diagnostics.get(FILE)[0]
+
+    const actions = context.controller.provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic] })
+
+    assert.deepEqual(actions.map((action) => action.title), [ASK_MODEL_TITLE])
+  })
+
+  it('offers nothing for a leaked credential, which is rotated rather than edited', async () => {
+    const context = setup({
+      results: [{ report: report([{ ...HASH_FINDING, is_credential: true }], { quick_fixes: FIXABLE_REPORT.quick_fixes }), excluded: 0 }],
+    })
+    const document = context.addDocument(FILE, SOURCE)
+    await context.controller.scanWorkspace()
+    const diagnostic = context.state.diagnostics.get(FILE)[0]
+
+    assert.deepEqual(context.controller.provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic] }), [])
+  })
+
+  it("offers nothing for another extension's diagnostics, or after the findings are cleared", async () => {
+    const { controller, document, diagnostic } = await scanned()
+
+    const other = { ...diagnostic, source: 'eslint' }
+    assert.deepEqual(controller.provideCodeActions(document, diagnostic.range, { diagnostics: [other] }), [])
+
+    controller.clear()
+    assert.deepEqual(controller.provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic] }), [])
+  })
+})
+
+describe('applying a fix', () => {
+  it('asks first, then makes the change, saves the file and scans again', async () => {
+    const { controller, actions, state, document, fixer, scanner } = await scanned({ fixResults: [verified()] })
+    state.infoChoices.push(BUTTONS.APPLY)
+
+    const applied = await controller.fix(actions[0].command.arguments[0])
+
+    assert.equal(applied, true)
+    assert.equal(document.getText(), SOURCE.replace('md5', 'sha256'))
+    assert.equal(document.saves, 1)
+    assert.equal(scanner.calls.length, 2)
+    assert.equal(fixer.calls[0].fingerprint, FIXABLE)
+    assert.equal(fixer.calls[0].mode, 'builtin')
+    assert.equal(fixer.calls[0].model, undefined)
+    const question = state.infoCalls.find((call) => call.options?.modal)
+    assert.equal(question.message, 'Use SHA-256 instead of a broken hash')
+    assert.match(question.options.detail, /Before you accept it: Old digests will not match/)
+    assert.match(question.options.detail, /does not say the program behaves the same/)
+  })
+
+  it('changes nothing when the user does not choose Apply', async () => {
+    const { controller, actions, state, document, scanner } = await scanned({ fixResults: [verified()] })
+    state.infoChoices.push(undefined)
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.equal(document.getText(), SOURCE)
+    assert.equal(state.applied.length, 0)
+    assert.equal(scanner.calls.length, 1)
+  })
+
+  it('shows the change side by side before applying it, when asked', async () => {
+    const { controller, actions, state, document } = await scanned({ fixResults: [verified()] })
+    state.infoChoices.push(BUTTONS.SHOW, BUTTONS.APPLY)
+
+    await controller.fix(actions[0].command.arguments[0])
+
+    const diff = state.executed.find((call) => call[0] === 'vscode.diff')
+    assert.equal(diff[1], document.uri)
+    assert.equal(diff[2].scheme, PROPOSAL_SCHEME)
+    const proposal = state.contentProviders.get(PROPOSAL_SCHEME).provideTextDocumentContent(diff[2])
+    assert.equal(proposal, SOURCE.replace('md5', 'sha256'))
+    assert.equal(document.getText(), SOURCE.replace('md5', 'sha256'))
+  })
+
+  it('refuses to fix a file with unsaved changes, without asking the scanner', async () => {
+    const { controller, actions, state, fixer } = await scanned({ fixResults: [verified()], document: { dirty: true } })
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.equal(fixer.calls.length, 0)
+    assert.match(state.warnings[0].message, /Save the file first/)
+  })
+
+  it('applies nothing when the file changed while the fix was being checked', async () => {
+    const { controller, actions, state, document } = await scanned({ fixResults: [verified()] })
+    // Edited and saved by the user while the question was open.
+    state.infoChoices.push(BUTTONS.SHOW)
+    state.infoChoices.push(BUTTONS.APPLY)
+    const originalExecute = state.executed.push.bind(state.executed)
+    state.executed.push = (call) => {
+      if (call[0] === 'vscode.diff') document.text = SOURCE.replace('md5(value)', 'md5(other)')
+      return originalExecute(call)
+    }
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.equal(document.getText(), SOURCE.replace('md5(value)', 'md5(other)'))
+    assert.equal(state.applied.length, 0)
+    assert.match(state.warnings[0].message, /changed since this fix was checked/)
+  })
+
+  it('applies nothing when the file has unsaved edits by the time the user answers', async () => {
+    const { controller, actions, state, document } = await scanned({ fixResults: [verified()] })
+    state.infoChoices.push(BUTTONS.SHOW, BUTTONS.APPLY)
+    const originalExecute = state.executed.push.bind(state.executed)
+    state.executed.push = (call) => {
+      // A different line is edited and not saved: the lines the fix replaces
+      // still match, but saving would also save an edit nobody checked.
+      if (call[0] === 'vscode.diff') {
+        document.text = SOURCE.replace('import hashlib', 'import hashlib  # edited')
+        document.isDirty = true
+      }
+      return originalExecute(call)
+    }
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.equal(state.applied.length, 0)
+    assert.equal(document.saves, 0)
+  })
+
+  it('says so when the editor refuses the edit', async () => {
+    const { controller, actions, state, document } = await scanned({ fixResults: [verified()] })
+    state.infoChoices.push(BUTTONS.APPLY)
+    state.applyResult = false
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.equal(document.saves, 0)
+    assert.match(state.errors[0].message, /did not accept the change/)
+  })
+
+  it('does not let its own save start a second scan', async () => {
+    const { controller, actions, state, timers } = await scanned({
+      fixResults: [verified()],
+      configuration: { scanOnSave: true },
+    })
+    state.infoChoices.push(BUTTONS.APPLY)
+
+    await controller.fix(actions[0].command.arguments[0])
+
+    assert.equal(timers.length, 0)
+  })
+
+  it('works on one fix at a time', async () => {
+    let release
+    const pending = new Promise((resolve) => {
+      release = resolve
+    })
+    const { controller, actions, state } = await scanned({ fixResults: [() => pending] })
+
+    const first = controller.fix(actions[0].command.arguments[0])
+    const second = await controller.fix(actions[0].command.arguments[0])
+    release(verified({ status: 'no_fix', edits: [], reason: 'Nothing.' }))
+    await first
+
+    assert.equal(second, false)
+    assert.ok(state.infos.includes('SentinelForge is already checking a fix. One at a time.'))
+  })
+
+  it('refuses a request that did not come from its own quick fix', async () => {
+    const { controller, state, fixer } = await scanned()
+
+    for (const request of [
+      undefined,
+      { folder: '/elsewhere', file: FILE, fingerprint: FIXABLE, mode: 'builtin' },
+      { folder: '/work/project', file: FILE, fingerprint: 'x', mode: 'builtin' },
+      { folder: '/work/project', file: FILE, fingerprint: FIXABLE, mode: 'shell' },
+    ]) {
+      assert.equal(await controller.fix(request), false)
+    }
+
+    assert.equal(fixer.calls.length, 0)
+    assert.equal(state.errors.length, 4)
+  })
+})
+
+describe('when there is no fix to apply', () => {
+  it('explains a rejected change and can show it', async () => {
+    const rejected = verified({ status: 'rejected', reason: 'The re-scan found a new problem.', diff: '-a\n+b\n' })
+    const { controller, actions, state, document } = await scanned({ fixResults: [rejected] })
+    state.warningChoices.push(BUTTONS.SHOW_REJECTED)
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.match(state.warnings[0].message, /did not offer this change\. The re-scan found a new problem\./)
+    assert.deepEqual(state.warnings[0].actions, [BUTTONS.SHOW_REJECTED])
+    assert.equal(state.shown[0].document.getText(), '-a\n+b\n')
+    assert.equal(document.getText(), SOURCE)
+  })
+
+  it('lets the user ask the model again after a rejected model fix', async () => {
+    const rejected = verified({ status: 'rejected', source: 'model', reason: 'It deleted the function.' })
+    const { controller, actions, state, fixer } = await scanned({ fixResults: [rejected, rejected] })
+    state.warningChoices.push(BUTTONS.TRY_AGAIN, undefined)
+
+    await controller.fix(actions[1].command.arguments[0])
+
+    assert.equal(fixer.calls.length, 2)
+    assert.equal(fixer.calls[0].model.retry, false)
+    assert.equal(fixer.calls[1].model.retry, true)
+  })
+
+  it('offers the local model when there is no built-in fix', async () => {
+    const none = verified({ status: 'no_fix', edits: [], reason: 'There is no built-in fix for PY010.' })
+    const { controller, actions, state, fixer } = await scanned({ fixResults: [none, none] })
+    state.infoChoices.push(BUTTONS.ASK_MODEL, undefined)
+
+    await controller.fix(actions[0].command.arguments[0])
+
+    assert.deepEqual(state.infoCalls[0].actions, [BUTTONS.ASK_MODEL])
+    assert.equal(fixer.calls[1].mode, 'model')
+  })
+
+  it('sends the model settings from the user settings', async () => {
+    const none = verified({ status: 'no_fix', edits: [], reason: 'Nothing.' })
+    const { controller, actions, fixer } = await scanned({
+      fixResults: [none],
+      configuration: { ollamaUrl: 'http://localhost:11434', model: 'qwen2.5-coder:7b', modelTimeoutSeconds: 240 },
+    })
+
+    await controller.fix(actions[1].command.arguments[0])
+
+    assert.deepEqual(fixer.calls[0].model, {
+      url: 'http://localhost:11434',
+      name: 'qwen2.5-coder:7b',
+      timeoutSeconds: 240,
+      allowRemote: false,
+      retry: false,
+    })
+  })
+
+  it('points at the settings when the fix cannot be run because of them', async () => {
+    const { controller, actions, state } = await scanned({
+      fixResults: [new FixError('Python was not found at "python".', '', { setup: true })],
+    })
+    state.errorChoice = BUTTONS.SETTINGS
+
+    assert.equal(await controller.fix(actions[0].command.arguments[0]), false)
+
+    assert.deepEqual(state.errors.at(-1), { message: 'Python was not found at "python".', actions: [BUTTONS.SETTINGS] })
+    assert.deepEqual(state.executed.at(-1), ['workbench.action.openSettings', 'sentinelforge'])
+  })
+
+  it("passes the scanner's reason on when the model cannot be reached", async () => {
+    const { controller, actions, state } = await scanned({
+      fixResults: [new FixError('Could not reach Ollama at http://localhost:11434. Start it with: ollama serve')],
+    })
+
+    await controller.fix(actions[1].command.arguments[0])
+
+    assert.match(state.errors.at(-1).message, /Could not reach Ollama/)
+    assert.ok(state.output.some((line) => /Could not reach Ollama/.test(line)))
+  })
+})
+
+// --- installed from a package: the one-time setup ----------------------------
+
+/** An extension folder with the scanner packaged inside it, and no settings. */
+function packaged(extra = {}) {
+  const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-extension-'))
+  fs.mkdirSync(path.join(extensionPath, 'scanner', 'app', 'cli'), { recursive: true })
+  fs.writeFileSync(path.join(extensionPath, 'scanner', 'app', 'cli', '__main__.py'), '')
+  const calls = []
+  const context = setup({
+    extensionPath,
+    configuration: { pythonPath: '', backendPath: '' },
+    createEnvironment: async (options) => {
+      calls.push(options)
+      return '/storage/sentinelforge/scanner-env/bin/python'
+    },
+    ...extra,
+  })
+  return { ...context, extensionPath, environments: calls }
+}
+
+describe('the one-time setup', () => {
+  it('asks to set the scanner up instead of failing the first scan', async () => {
+    const { controller, state, scanner, environments } = packaged()
+
+    assert.equal(await controller.scanWorkspace(), false)
+
+    assert.equal(scanner.calls.length, 0)
+    assert.match(state.warnings[0].message, /one-time setup/)
+    assert.deepEqual(state.warnings[0].actions, [BUTTONS.SET_UP])
+    assert.equal(environments.length, 0)
+  })
+
+  it('installs only after the user agrees, into the extension storage, then scans', async () => {
+    const { controller, state, environments, extensionPath } = packaged()
+    state.warningChoices.push(BUTTONS.SET_UP)
+    state.infoChoices.push(BUTTONS.INSTALL)
+
+    await controller.scanWorkspace()
+
+    assert.equal(environments.length, 1)
+    assert.equal(environments[0].backendPath, path.join(extensionPath, 'scanner'))
+    assert.equal(environments[0].storagePath, '/storage/sentinelforge')
+    const question = state.infoCalls.find((call) => call.options?.modal)
+    assert.match(question.options.detail, /Nothing is installed into your own Python/)
+    assert.ok(state.infos.includes('SentinelForge: the scanner is set up. Scanning now.'))
+  })
+
+  it('installs nothing when the user does not agree', async () => {
+    const { controller, state, environments } = packaged()
+    state.warningChoices.push(BUTTONS.SET_UP)
+    state.infoChoices.push(undefined)
+
+    await controller.scanWorkspace()
+
+    assert.equal(environments.length, 0)
+  })
+
+  it('says what went wrong when the setup fails', async () => {
+    const { controller, state } = packaged({
+      createEnvironment: async () => {
+        const error = new (require('../src/setup').SetupError)('SentinelForge needs Python 3.12 or newer.', 'python3: 3.10')
+        throw error
+      },
+    })
+    state.infoChoices.push(BUTTONS.INSTALL)
+
+    assert.equal(await controller.setUp(), false)
+
+    assert.deepEqual(state.errors.at(-1), { message: 'SentinelForge needs Python 3.12 or newer.', actions: [] })
+    assert.ok(state.output.includes('python3: 3.10'))
+  })
+
+  it('also asks before a fix, and does not ask the scanner first', async () => {
+    const { controller, state, fixer } = packaged()
+
+    const request = { folder: '/work/project', file: '/work/project/a.py', fingerprint: 'c'.repeat(64), mode: 'builtin' }
+    assert.equal(await controller.fix(request), false)
+
+    assert.equal(fixer.calls.length, 0)
+    assert.match(state.warnings[0].message, /one-time setup/)
   })
 })

@@ -21,9 +21,11 @@ from typing import TextIO
 
 from app.cli import baseline as baseline_file
 from app.cli import evaluate as evaluate_command
+from app.cli import fix as fix_command
 from app.cli.gate import DEFAULT_FAIL_ON, FAIL_ON_CHOICES, MAX_LISTED, Gate, GateResult, evaluate
 from app.cli.scan import ScanOptions, ScanOutcome, scan
 from app.cli.text import plain
+from app.fixing import builtin as builtin_fixes
 from app.reports import html as html_report
 from app.reports import markdown as markdown_report
 from app.reports import sarif as sarif_report
@@ -98,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--quiet", action="store_true", help="print the verdict only, not each finding"
     )
     evaluate_command.add_parser(commands)
+    fix_command.add_parser(commands)
     return parser
 
 
@@ -125,6 +128,8 @@ def main(
 
     if arguments.command == "evaluate":
         return evaluate_command.run(arguments, out, err)
+    if arguments.command == "fix":
+        return fix_command.run(arguments, out, err)
 
     root = arguments.path
     if not root.is_dir():
@@ -193,7 +198,7 @@ def _write_files(
         ),
         arguments.markdown: lambda: markdown_report.render(report),
         arguments.html: lambda: html_report.render(report),
-        arguments.json: lambda: ReportRead.from_report(report).model_dump_json(indent=2) + "\n",
+        arguments.json: lambda: report_json(report),
     }
     for path, render in documents.items():
         if path is None:
@@ -203,6 +208,19 @@ def _write_files(
         # uploaded from Windows should not differ from one built on Linux.
         with path.open("w", encoding="utf-8", newline="") as handle:
             handle.write(render())
+
+
+def report_json(report: Report) -> str:
+    """The report as data, and which of its rules this tool can fix by itself.
+
+    ``quick_fixes`` is not part of the report: a report describes the code, and
+    this describes the tool. It is here because the one consumer of this file
+    that can act on it — an editor — needs to know which findings to offer a
+    one-click fix for without keeping a list of its own to fall out of date.
+    """
+    data = ReportRead.from_report(report).model_dump(mode="json")
+    data["quick_fixes"] = builtin_fixes.titles()
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def _print_summary(  # noqa: PLR0913 - one argument per thing the summary states
@@ -271,4 +289,12 @@ def _print_summary(  # noqa: PLR0913 - one argument per thing the summary states
         write(f"    … and {len(result.blocking) - MAX_LISTED} more")
 
 
-__all__ = ["EXIT_ERROR", "EXIT_GATE_FAILED", "EXIT_PASSED", "build_parser", "main", "plain"]
+__all__ = [
+    "EXIT_ERROR",
+    "EXIT_GATE_FAILED",
+    "EXIT_PASSED",
+    "build_parser",
+    "main",
+    "plain",
+    "report_json",
+]

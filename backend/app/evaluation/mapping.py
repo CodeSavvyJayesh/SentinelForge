@@ -30,6 +30,7 @@ published, and never scored.
 """
 
 from app.analysis.engine import PYTHON_SUFFIXES
+from app.analysis.java_analysis import JAVA_SUFFIXES, RULE_FOR_KIND
 from app.analysis.patterns import PATTERN_RULES
 from app.analysis.rules import ALL_RULES
 
@@ -40,6 +41,7 @@ RULE_CATEGORY: dict[str, str] = {
     "PY016": "cmdi",
     "JS002": "cmdi",
     "JV001": "cmdi",
+    "JV007": "cmdi",
     "PH001": "cmdi",
     "GO001": "cmdi",
     # SQL injection
@@ -65,18 +67,23 @@ RULE_CATEGORY: dict[str, str] = {
     # Cross-site scripting
     "JS003": "xss",
     "PY021": "xss",
+    "JV011": "xss",
     # XML external entities
     "PY015": "xxe",
     # Path traversal
     "PY017": "pathtraver",
+    "JV008": "pathtraver",
     # XPath injection
     "PY018": "xpathi",
+    "JV010": "xpathi",
     # LDAP injection
     "PY019": "ldapi",
+    "JV009": "ldapi",
     # Open redirect
     "PY020": "redirect",
     # Trust boundary violation
     "PY022": "trustbound",
+    "JV012": "trustbound",
     # Cookie without the Secure attribute
     "PY023": "securecookie",
     "JV006": "securecookie",
@@ -103,12 +110,18 @@ _PATTERN_SUFFIXES: dict[str, frozenset[str] | None] = {
     item.rule.id: item.suffixes for item in PATTERN_RULES
 }
 _PYTHON_RULES: frozenset[str] = frozenset(rule.id for rule in ALL_RULES if rule.id.startswith("PY"))
+# The Java flow rules (SQL001 is also a pattern rule, and is read as one).
+_JAVA_FLOW_RULES: frozenset[str] = frozenset(
+    rule.id for rule in RULE_FOR_KIND.values() if rule.id not in _PATTERN_SUFFIXES
+)
 
 
 def reads(rule_id: str, suffix: str) -> bool:
     """Whether a rule is ever applied to files with this suffix."""
     if rule_id in _PYTHON_RULES:
         return suffix in PYTHON_SUFFIXES
+    if rule_id in _JAVA_FLOW_RULES:
+        return suffix in JAVA_SUFFIXES
     if rule_id in _PATTERN_SUFFIXES:
         suffixes = _PATTERN_SUFFIXES[rule_id]
         return suffixes is None or suffix in suffixes

@@ -1,0 +1,12 @@
+# What the command-line scanner needs, and nothing it does not: no server, no
+# database driver, no migrations. The VS Code extension installs exactly these
+# into its own environment the first time it is set up.
+#
+# The versions are the ones in requirements.txt, so the scanner in the editor is
+# the scanner that was tested. Keep the two files in step.
+fastapi==0.141.1
+sqlalchemy==2.0.52
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.2
+python-multipart==0.0.26

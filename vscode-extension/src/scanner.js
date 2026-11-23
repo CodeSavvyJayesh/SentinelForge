@@ -6,7 +6,9 @@
  * The extension contains no detection logic. It runs `python -m app.cli scan`
  * — the same command a build pipeline runs — and reads the JSON report. One
  * analyser means the editor, the pipeline and the web application cannot
- * disagree about what is a finding.
+ * disagree about what is a finding. A fix is asked for the same way
+ * (`python -m app.cli fix`), so the editor cannot disagree with the scanner
+ * about whether a change worked either: the scanner re-scans it and says.
  *
  * Three decisions here are about not being turned against the user:
  *
@@ -26,7 +28,13 @@ const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 
+const { FixResultError, MODES, isFingerprint, isMode, parseFixResult } = require('./fixes')
+
 const DEFAULT_TIMEOUT_MS = 120_000
+const DEFAULT_MODEL_TIMEOUT_SECONDS = 300
+// The fix command's own exit codes: a change the re-scan supports, no change
+// to offer, and "could not be run". The first two both come with a result.
+const EXIT_NO_FIX = 1
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 const MAX_REPORT_BYTES = 100 * 1024 * 1024
 
@@ -39,6 +47,18 @@ class ScanError extends Error {
     super(message)
     this.name = 'ScanError'
     this.detail = detail
+  }
+}
+
+/**
+ * A fix could not be attempted. `setup` is true when the cause is how the
+ * extension is configured rather than the finding or the model.
+ */
+class FixError extends ScanError {
+  constructor(message, detail = '', { setup = false } = {}) {
+    super(message, detail)
+    this.name = 'FixError'
+    this.setup = setup
   }
 }
 
@@ -176,10 +196,114 @@ async function scan(options, dependencies = {}) {
   }
 }
 
+function buildFixArguments({ folder, fingerprint, mode, jsonPath, model = {} }) {
+  const args = ['-m', 'app.cli', 'fix', folder, `--fingerprint=${fingerprint}`, `--mode=${mode}`, `--json=${jsonPath}`]
+  if (mode === MODES.MODEL) {
+    // One token each, like every other option: a setting that begins with
+    // `--` stays a value.
+    if (model.url) args.push(`--ollama-url=${model.url}`)
+    if (model.name) args.push(`--model=${model.name}`)
+    args.push(`--timeout=${model.timeoutSeconds ?? DEFAULT_MODEL_TIMEOUT_SECONDS}`)
+    if (model.allowRemote === true) args.push('--allow-remote-model')
+    if (model.retry === true) args.push('--retry')
+  }
+  return args
+}
+
+function explainFix(error, stderr, context) {
+  const problem = explain(error, stderr, context)
+  // Not found, not installed, timed out: the same causes as for a scan, and
+  // the same advice. Anything else is the fix command saying why it stopped.
+  const setup = error.code === 'ENOENT' || /No module named/.test(stderr)
+  if (setup) return new FixError(problem.message, problem.detail, { setup: true })
+  if (error.killed === true || error.signal) {
+    return new FixError(
+      `The fix was stopped after ${Math.round(context.timeoutMs / 1000)} seconds. ` +
+        'A local model can take minutes on a CPU: raise sentinelforge.modelTimeoutSeconds.',
+      stderr,
+    )
+  }
+  const reason = lastLine(stderr).replace(/^error:\s*/, '')
+  return new FixError(reason || 'The fix could not be worked out.', stderr)
+}
+
+/**
+ * Ask the scanner for a fix for one finding, checked by a re-scan.
+ *
+ * Nothing in the workspace is written by this: the scanner works on a copy,
+ * and the result says what would change. Applying it is the editor's job, and
+ * the user's decision.
+ *
+ * @param {{ pythonPath: string, backendPath: string, folder: string,
+ *           fingerprint: string, mode: string, timeoutMs?: number,
+ *           model?: { url?: string, name?: string, timeoutSeconds?: number,
+ *                     allowRemote?: boolean, retry?: boolean } }} options
+ * @param {{ execFile?: typeof execFile }} [dependencies] replaced in tests
+ * @returns {Promise<object>} the result, as `parseFixResult` returns it
+ */
+async function fix(options, dependencies = {}) {
+  const run = dependencies.execFile ?? execFile
+  if (!options.backendPath) {
+    throw new FixError(
+      'Set sentinelforge.backendPath in your user settings to the "backend" folder of SentinelForge.',
+      '',
+      { setup: true },
+    )
+  }
+  if (!isFingerprint(options.fingerprint) || !isMode(options.mode)) {
+    throw new FixError('That finding cannot be fixed from here. Scan again, then ask for the fix.')
+  }
+  const scanMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const modelSeconds = options.model?.timeoutSeconds ?? DEFAULT_MODEL_TIMEOUT_SECONDS
+  // A fix scans twice; with the model it also waits for one generation.
+  const timeoutMs = options.mode === MODES.MODEL ? scanMs * 2 + modelSeconds * 1000 : scanMs * 2
+
+  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'sentinelforge-'))
+  try {
+    const jsonPath = path.join(scratch, 'fix.json')
+    const pythonPath = options.pythonPath || 'python'
+    const { error, stderr } = await run(
+      pythonPath,
+      buildFixArguments({ ...options, jsonPath, model: { ...options.model, timeoutSeconds: modelSeconds } }),
+      {
+        cwd: options.backendPath,
+        timeout: timeoutMs,
+        maxBuffer: MAX_OUTPUT_BYTES,
+        windowsHide: true,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      },
+    )
+    if (error && error.code !== EXIT_NO_FIX) throw explainFix(error, stderr, { pythonPath, timeoutMs })
+
+    let text
+    try {
+      const { size } = await fs.stat(jsonPath)
+      if (size > MAX_REPORT_BYTES) throw new FixError('The result is too large to load.')
+      text = await fs.readFile(jsonPath, 'utf8')
+    } catch (cause) {
+      if (cause instanceof FixError) throw cause
+      throw new FixError('The scanner finished without writing a result.', stderr)
+    }
+    try {
+      return parseFixResult(JSON.parse(text))
+    } catch (cause) {
+      if (cause instanceof FixResultError) throw new FixError(cause.message)
+      throw new FixError('The scanner wrote a result that is not valid JSON.')
+    }
+  } finally {
+    await fs.rm(scratch, { recursive: true, force: true })
+  }
+}
+
 module.exports = {
+  DEFAULT_MODEL_TIMEOUT_SECONDS,
   DEFAULT_TIMEOUT_MS,
+  FixError,
   ScanError,
   buildArguments,
+  buildFixArguments,
+  explainFix,
+  fix,
   excludedCount,
   execFile,
   explain,

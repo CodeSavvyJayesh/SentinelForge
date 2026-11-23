@@ -156,6 +156,53 @@ The upload runs even when the gate failed — a failed build is exactly when the
 findings need to be visible — and is allowed to fail on its own, because code
 scanning is not available for every repository.
 
+## Fixing one finding
+
+```bash
+python -m app.cli fix PATH --at app/main.py:12            # a built-in fix
+python -m app.cli fix PATH --at app/main.py:12 --mode model
+python -m app.cli fix PATH --fingerprint HEX --json fix.json
+python -m app.cli fix PATH --at app/main.py:12 --apply     # write it, if it passed
+```
+
+It finds the finding by scanning the folder as it is now, works out a change —
+a built-in rewrite, or one from the local model — applies the change to a
+**throwaway copy**, and scans the copy again. The change is reported as
+verified only if the finding is gone, nothing new appeared, the change is not
+a deletion, and a Python file still parses.
+
+```text
+SentinelForge fix: PY007 app/main.py:5  Weak hash algorithm (MD5 or SHA-1)
+  built-in: Use SHA-256 instead of a broken hash
+  ...
+  -    return hashlib.md5(value).hexdigest()
+  +    return hashlib.sha256(value).hexdigest()
+
+  Checked by scanning a copy with the change applied:
+    [passed] The original PY007 finding is gone.
+    [passed] The re-scan detects nothing that was not there before.
+    [passed] The change replaces code with code.
+    [passed] The patched file still parses as Python.
+
+VERIFIED: the finding is gone and the re-scan found nothing new. Nothing was written.
+```
+
+| Option | What it does |
+| --- | --- |
+| `--at FILE:LINE` / `--fingerprint HEX` | which finding; `--rule ID` when a line has several |
+| `--mode builtin` | a mechanical rewrite, no model (default). 12 rules have one |
+| `--mode model` | ask the local Ollama model; `--ollama-url`, `--model`, `--timeout` |
+| `--retry` | ask the model again at a slightly higher temperature |
+| `--allow-remote-model` | allow a model that is not on this machine. Off by default: the code around the finding is sent to it |
+| `--json FILE` | the result as data: status, diff, line edits, every check |
+| `--apply` | write the change — only if it passed, and only if the file has not changed since |
+
+Exit codes: `0` a verified change, `1` no change to offer (no built-in fix, the
+proposal was refused, or the re-scan rejected it), `2` the command could not be
+run. Without `--apply` nothing is written. A leaked credential is never given a
+fix: it has to be rotated. This is the command the VS Code extension runs for
+its quick fixes.
+
 ## Marking the analyser against a benchmark
 
 A second command answers a different question: not "what is in this code" but

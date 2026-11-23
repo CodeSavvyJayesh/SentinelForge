@@ -6,7 +6,17 @@ const os = require('node:os')
 const path = require('node:path')
 const { describe, it } = require('node:test')
 
-const { ScanError, buildArguments, excludedCount, parseReport, scan } = require('../src/scanner')
+const {
+  DEFAULT_MODEL_TIMEOUT_SECONDS,
+  FixError,
+  ScanError,
+  buildArguments,
+  buildFixArguments,
+  excludedCount,
+  fix,
+  parseReport,
+  scan,
+} = require('../src/scanner')
 
 const REPORT = { open_count: 1, score: 40, grade: 'C', findings: [{ file_path: 'a.py', line_start: 1 }] }
 const OPTIONS = { pythonPath: '/venv/bin/python', backendPath: '/sf/backend', folder: '/work/project' }
@@ -231,4 +241,137 @@ describe('scan', () => {
       return true
     })
   })
+})
+
+// --- fixes -------------------------------------------------------------------
+
+const FINGERPRINT = 'b'.repeat(64)
+const FIX_OPTIONS = { ...OPTIONS, fingerprint: FINGERPRINT, mode: 'builtin' }
+const FIX_RESULT = {
+  schema: 1,
+  status: 'verified',
+  source: 'builtin',
+  title: 'Use SHA-256 instead of a broken hash',
+  edits: [{ first_line: 5, last_line: 5, old: ['md5\n'], new: ['sha256\n'] }],
+}
+
+describe('buildFixArguments', () => {
+  it('asks for one finding by fingerprint, with every option one token', () => {
+    assert.deepEqual(
+      buildFixArguments({ folder: '/work/project', fingerprint: FINGERPRINT, mode: 'builtin', jsonPath: '/tmp/f.json' }),
+      ['-m', 'app.cli', 'fix', '/work/project', `--fingerprint=${FINGERPRINT}`, '--mode=builtin', '--json=/tmp/f.json'],
+    )
+  })
+
+  it('never asks the scanner to write the change itself', () => {
+    const args = buildFixArguments({ folder: '/w', fingerprint: FINGERPRINT, mode: 'model', jsonPath: '/tmp/f.json' })
+
+    assert.equal(args.includes('--apply'), false)
+  })
+
+  it('passes the model settings only when the model is asked', () => {
+    const model = { url: 'http://localhost:11434', name: '--apply', timeoutSeconds: 90, allowRemote: false, retry: true }
+
+    assert.deepEqual(
+      buildFixArguments({ folder: '/w', fingerprint: FINGERPRINT, mode: 'model', jsonPath: '/j', model }).slice(7),
+      ['--ollama-url=http://localhost:11434', '--model=--apply', '--timeout=90', '--retry'],
+    )
+    assert.equal(
+      buildFixArguments({ folder: '/w', fingerprint: FINGERPRINT, mode: 'builtin', jsonPath: '/j', model }).length,
+      7,
+    )
+  })
+
+  it('sends code to a model on another machine only when the user allowed it', () => {
+    const args = buildFixArguments({
+      folder: '/w',
+      fingerprint: FINGERPRINT,
+      mode: 'model',
+      jsonPath: '/j',
+      model: { allowRemote: true },
+    })
+
+    assert.ok(args.includes('--allow-remote-model'))
+    assert.ok(args.includes(`--timeout=${DEFAULT_MODEL_TIMEOUT_SECONDS}`))
+  })
+})
+
+describe('fix', () => {
+  it('runs the fix command from the scanner folder and reads its result', async () => {
+    const { run, calls } = fakeRun({ report: FIX_RESULT })
+
+    const result = await fix(FIX_OPTIONS, { execFile: run })
+
+    assert.equal(result.status, 'verified')
+    assert.equal(result.edits[0].firstLine, 5)
+    assert.equal(calls[0].file, '/venv/bin/python')
+    assert.equal(calls[0].options.cwd, '/sf/backend')
+    assert.deepEqual(calls[0].args.slice(0, 4), ['-m', 'app.cli', 'fix', '/work/project'])
+  })
+
+  it('reads the result of "no change to offer", which exits with 1', async () => {
+    const { run } = fakeRun({ report: { schema: 1, status: 'no_fix', reason: 'No built-in fix.' }, error: failure({ code: 1 }) })
+
+    const result = await fix(FIX_OPTIONS, { execFile: run })
+
+    assert.equal(result.status, 'no_fix')
+    assert.equal(result.reason, 'No built-in fix.')
+  })
+
+  it('removes its scratch folder afterwards', async () => {
+    const { run, calls } = fakeRun({ report: FIX_RESULT })
+
+    await fix(FIX_OPTIONS, { execFile: run })
+
+    assert.equal(fs.existsSync(calls.scratch), false)
+  })
+
+  it('gives the model time to answer on top of two scans', async () => {
+    const { run, calls } = fakeRun({ report: FIX_RESULT })
+
+    await fix({ ...FIX_OPTIONS, mode: 'model', timeoutMs: 10_000, model: { timeoutSeconds: 60 } }, { execFile: run })
+
+    assert.equal(calls[0].options.timeout, 10_000 * 2 + 60_000)
+  })
+
+  it('does not run anything for a request it cannot trust', async () => {
+    const { run, calls } = fakeRun({ report: FIX_RESULT })
+
+    await assert.rejects(fix({ ...FIX_OPTIONS, fingerprint: '--apply' }, { execFile: run }), FixError)
+    await assert.rejects(fix({ ...FIX_OPTIONS, mode: 'shell' }, { execFile: run }), FixError)
+    await assert.rejects(fix({ ...FIX_OPTIONS, backendPath: '' }, { execFile: run }), (error) => error.setup === true)
+
+    assert.equal(calls.length, 0)
+  })
+
+  const failures = [
+    ['a missing interpreter, as a setup problem', { error: failure({ code: 'ENOENT' }) }, /Python was not found/, true],
+    [
+      'a model that took too long',
+      { error: failure({ killed: true, signal: 'SIGTERM' }) },
+      /stopped after \d+ seconds\..*modelTimeoutSeconds/,
+      false,
+    ],
+    [
+      "the fix command's own reason",
+      { error: failure({ code: 2 }), stderr: 'error: Could not reach Ollama at http://localhost:11434\n' },
+      /^Could not reach Ollama at http:\/\/localhost:11434$/,
+      false,
+    ],
+    ['a command that wrote no result', { report: null }, /without writing a result/, false],
+    ['a result that is not JSON', { raw: '{' }, /not valid JSON/, false],
+    ['a result in another shape', { report: { schema: 1, status: 'verified', edits: [] } }, /nothing to apply/, false],
+  ]
+  for (const [name, outcome, expected, setup] of failures) {
+    it(`explains ${name}`, async () => {
+      const { run } = fakeRun({ report: null, ...outcome })
+
+      await assert.rejects(fix(FIX_OPTIONS, { execFile: run }), (error) => {
+        assert.ok(error instanceof FixError)
+        assert.match(error.message, expected)
+        assert.equal(error.setup, setup)
+        return true
+      })
+    })
+  }
 })

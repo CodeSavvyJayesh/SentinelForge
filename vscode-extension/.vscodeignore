@@ -1,4 +1,6 @@
 test/**
 support/**
+scripts/**
 .vscode/**
 **/*.test.js
+*.vsix

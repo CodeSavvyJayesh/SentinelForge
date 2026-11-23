@@ -524,6 +524,91 @@ RULE_NOTES: tuple[RuleNote, ...] = (
         in web.xml so the container's own session cookie is covered.""",
     ),
     _note(
+        "JV007",
+        "Request data in an operating-system command",
+        "Java",
+        """Runtime.exec and ProcessBuilder start a program. When a value from the
+        request is part of the command line, an argument, or an environment variable
+        of the new process, the caller decides what runs or how it behaves: a ; in a
+        shell command starts a second command, an option such as --output=/etc/...
+        changes what the program writes, and an environment variable such as
+        LD_PRELOAD loads code into it.""",
+        """Run a fixed program with a fixed list of arguments:
+        new ProcessBuilder("convert", "--", inputPath).start(), never through
+        sh -c. Check any value from the request against a list of allowed values
+        before it becomes an argument, and put "--" before it so it cannot be read as
+        an option. Do not pass request data into the process's environment.""",
+    ),
+    _note(
+        "JV008",
+        "Request data used as a file path",
+        "Java",
+        """A file name taken from the request can contain "../" or be an absolute
+        path, so new File(base + name) opens the application's own configuration,
+        another user's upload or a system file. On a write it overwrites them.
+        Checking that the name does not contain "../" is not enough on its own:
+        absolute paths, encoded separators and symbolic links get past it.""",
+        """Resolve the final path and confirm it is still inside the folder you meant:
+        Path target = base.resolve(name).normalize(); refuse unless
+        target.startsWith(base). Better still, do not accept a path at all: accept an
+        identifier and look the file up in a table of allowed ones.""",
+    ),
+    _note(
+        "JV009",
+        "Request data in an LDAP filter",
+        "Java",
+        """An LDAP filter is a small language: parentheses group conditions and * is a
+        wildcard. A value joined into (uid=" + name + ") can be *)(objectClass=* and
+        match every entry, or close the filter and add a condition of the attacker's
+        own, which turns a lookup into a login bypass or a directory dump.""",
+        """Pass the value as a filter argument, which the directory escapes:
+        ctx.search(base, "(uid={0})", new Object[] {name}, controls). Where the filter
+        must be built as text, escape the value for LDAP filters first (ESAPI's
+        encodeForLDAP, or Spring LDAP's LdapEncoder.filterEncode).""",
+    ),
+    _note(
+        "JV010",
+        "Request data in an XPath expression",
+        "Java",
+        """An XPath expression built by joining text is parsed as XPath, so a value
+        such as ' or '1'='1 changes which nodes are selected. Where the query decides
+        who is logged in or what a user may read, that is an authentication bypass or
+        a disclosure of the whole document.""",
+        """Use an XPath variable, which is passed as data and never parsed: write the
+        expression as /users/user[@name=$name] and supply the value through
+        xpath.setXPathVariableResolver. Where that is not possible, validate the
+        value against a strict pattern (digits only, a fixed alphabet) before it
+        reaches the expression.""",
+    ),
+    _note(
+        "JV011",
+        "Request data written into an HTML response",
+        "Java",
+        """What a servlet writes to response.getWriter() is the page the browser
+        renders. If part of it came from the request, a value such as
+        <script>...</script> runs in the visitor's browser with their session: it can
+        read the page, send requests as them and steal anything not marked HttpOnly.
+        The link that triggers it only has to be clicked.""",
+        """Escape every value from the request for the place it is written:
+        Encode.forHtml(value) from the OWASP Java Encoder for element content,
+        Encode.forHtmlAttribute for attributes. Better, render the page with a
+        template engine that escapes by default (Thymeleaf, JSP with c:out) instead
+        of writing HTML by hand. Never write request data into a format string:
+        printf and format read it as instructions.""",
+    ),
+    _note(
+        "JV012",
+        "Request data stored in the session without validation",
+        "Java",
+        """Code that reads the session usually assumes the server put the values
+        there. session.setAttribute(name, value) with a name or value from the
+        request lets the caller plant data that later code treats as its own: a role,
+        a user id, a flag that skips a check.""",
+        """Validate the value against what it is allowed to be before storing it, and
+        never let the request choose the attribute's name. Store the validated value
+        under a fixed name: session.setAttribute("preferredLanguage", checked).""",
+    ),
+    _note(
         "SQL001",
         "SQL query built by concatenation",
         "SQL",

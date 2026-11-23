@@ -179,8 +179,15 @@ recorded results can be reproduced.
 ## In VS Code
 
 The extension in `vscode-extension/` runs the same scanner and puts each finding
-on its line, in the Problems panel and in the status bar. Open that folder in
-VS Code and press `F5`, or see [its README](vscode-extension/README.md).
+on its line, in the Problems panel and in the status bar. Each finding has quick
+fixes — a built-in fix where one exists, or your local model — and every fix is
+checked by scanning a copy before you are asked to apply it.
+
+It installs on any machine with Python 3.12+, without this repository:
+`node vscode-extension/scripts/package.js` builds `sentinelforge-0.2.0.vsix`, and
+the extension sets up its scanner the first time it runs. To develop it, open
+`vscode-extension` in VS Code and press `F5`. See [its README](vscode-extension/README.md)
+and [publishing it](docs/devsecops/publishing.md).
 
 ## With Docker
 
@@ -211,12 +218,15 @@ See [running with Docker](docs/devsecops/docker.md).
 | 14 | DevSecOps integration (command-line scanner, quality gate, CI workflow, Docker Compose) | ✅ Done |
 | 15 | VS Code extension | ✅ Done |
 | 16 | Research evaluation (benchmark with known answers, data flow for Python, patch-outcome classifier) | ✅ Done |
+| 17 | Fixes in VS Code and on the command line (built-in fixes and the local model, each re-scanned) | ✅ Done |
+| 18 | Release readiness (installable extension package, one-time scanner setup, one-command classifier training) | ✅ Done |
+| 19 | Data flow for Java (six new rules, SQL reports on constants withdrawn; Java benchmark +33.5 → +97.1) | ✅ Done |
 
 ## Limitations (current)
 
-- Request data is followed to the call it reaches **for Python only, and inside one file**. For Java, JavaScript, PHP and Go the rules are still local: a finding says "this call is dangerous", not "user input reaches it".
-- Measured on the OWASP benchmarks, on test cases the rules were never tuned on, the analyser scores **+88 out of 100 for Python and +33 for Java** (recall minus false positive rate, averaged over categories). Java has no rule at all for five of the benchmark's eleven categories, and its SQL-injection rule cannot tell an injectable query from a safe one. These are results on generated test cases, not on real projects; see [the evaluation](docs/evaluation/README.md) for what they do and do not show.
-- The patch-outcome classifier has a training pipeline and **no result**: it needs fixes that were proposed and checked on a real installation, and refuses to train on fewer than 60. The application does not use it to decide anything.
+- Request data is followed to the call it reaches **for Python (inside one file) and Java (across files)**. For JavaScript, PHP and Go the rules are still local: a finding says "this call is dangerous", not "user input reaches it". For Java, "request data" means the servlet request and Spring's request parameters; other frameworks contribute nothing the walk recognises.
+- Measured on the OWASP benchmarks, on test cases the rules were never tuned on, the analyser scores **+88 out of 100 for Python and +97 for Java** (recall minus false positive rate, averaged over categories; the Java held-out half was measured a second time, after Phase 19, and that is disclosed). The benchmarks are generated from templates and the Java walk was written while reading them, so these are results on generated test cases, not on real projects; see [the evaluation](docs/evaluation/README.md) for what they do and do not show.
+- The patch-outcome classifier has a training pipeline and **no result**: it needs fixes that were proposed and checked on a real installation, and refuses to train on fewer than 60. `.\scripts\train-classifier.ps1` collects them and trains in one command, but it takes hours on a CPU. The application does not use it to decide anything.
 - "No findings" means these rules did not match — it is not a certificate of security, and the UI says so.
 - Scans run in the background on the API machine. Workers on other machines, and scheduled scans, are not built yet.
 - The knowledge base has to be built once, by hand (`python scripts/build_knowledge.py`), from a
@@ -272,8 +282,11 @@ See [running with Docker](docs/devsecops/docker.md).
   written on a clean copy — but **no image was built and no workflow run happened** before
   they were committed. Their first real run is the test.
 - The VS Code extension scans on request or on save, not as you type, and it underlines whole
-  lines. It is run from its folder (`F5`) rather than installed: packaging it as a `.vsix` has
-  not been done.
+  lines. It is packaged as a `.vsix` but not yet published on the Marketplace: that needs the
+  team's own publisher account (see [publishing](docs/devsecops/publishing.md)).
+- Built-in fixes exist for 12 rules; for the others the local model is asked, which takes up to
+  a minute on a CPU and is not always right. A fix is offered only after a re-scan of a copy
+  supports it, but the re-scan does not show the program still behaves the same.
 - Ingestion is still synchronous, so a very large upload ties up a request until the limits stop it. Scanning is not.
 - Only `.zip` archives and public `https://` Git URLs are accepted; private repositories need credentials (a later phase).
 - No password reset, email verification or two-factor authentication.
@@ -296,6 +309,7 @@ See [running with Docker](docs/devsecops/docker.md).
 - [The command-line scanner and the quality gate](docs/devsecops/command-line.md)
 - [Running with Docker](docs/devsecops/docker.md)
 - [The VS Code extension](vscode-extension/README.md)
+- [Publishing the VS Code extension](docs/devsecops/publishing.md)
 - [Evaluation: how often is the analyser right?](docs/evaluation/README.md)
 - [Evaluation: the patch-outcome classifier](docs/evaluation/classifier.md)
 - [Phase 1 report](docs/development/phases/phase-01-foundation.md)
@@ -314,3 +328,6 @@ See [running with Docker](docs/devsecops/docker.md).
 - [Phase 14 report](docs/development/phases/phase-14-devsecops.md)
 - [Phase 15 report](docs/development/phases/phase-15-vscode.md)
 - [Phase 16 report](docs/development/phases/phase-16-evaluation.md)
+- [Phase 17 report](docs/development/phases/phase-17-vscode-fixes.md)
+- [Phase 18 report](docs/development/phases/phase-18-release.md)
+- [Phase 19 report](docs/development/phases/phase-19-java-flow.md)

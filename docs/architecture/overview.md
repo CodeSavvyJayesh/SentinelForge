@@ -172,3 +172,6 @@ client polls GET /scans/{id}  ←── RUNNING → COMPLETED / FAILED ──  a
 | Pipeline integration: a command-line scanner with a quality gate, a CI workflow, Docker Compose | Implemented (Phase 14) — see [devsecops/command-line.md](../devsecops/command-line.md) |
 | VS Code extension: findings on the lines they are on, from the same scanner | Implemented (Phase 15) — see [vscode-extension/README.md](../../vscode-extension/README.md) |
 | Evaluation: the analyser marked against benchmarks with known answers; request data followed through Python; a patch-outcome classifier (pipeline only, no result yet) | Implemented (Phase 16) — see [evaluation](../evaluation/README.md) |
+| Fixes where the developer is: `python -m app.cli fix` and VS Code quick fixes, built-in or from the local model, each re-scanned on a copy before it is offered | Implemented (Phase 17) — see [command-line.md](../devsecops/command-line.md) |
+| Release: an installable VS Code package that carries the scanner and sets up its Python packages once; one-command classifier training | Implemented (Phase 18) — see [publishing.md](../devsecops/publishing.md) |
+| Data flow for Java: request data followed to commands, paths, LDAP, XPath, the page and the session; SQL reports on constants withdrawn | Implemented (Phase 19) — see [analysis.md](../security/analysis.md) |

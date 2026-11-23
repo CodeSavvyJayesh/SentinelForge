@@ -17,7 +17,8 @@ const path = require('node:path')
 const { describe, it } = require('node:test')
 
 const { toDiagnostics, statusFor } = require('../src/diagnostics')
-const { ScanError, scan } = require('../src/scanner')
+const { FixError, ScanError, fix, scan } = require('../src/scanner')
+const { planEdits, proposedText } = require('../src/fixes')
 
 const PYTHON = process.env.SENTINELFORGE_PYTHON
 const BACKEND = path.resolve(__dirname, '..', '..', 'backend')
@@ -147,6 +148,75 @@ describe('with the real scanner', { skip }, () => {
     await assert.rejects(
       scan(options(workspace({ 'a.py': 'x = 1\n' }), { pythonPath: path.join(os.tmpdir(), 'no-such-python') })),
       (error) => error instanceof ScanError && /Python was not found/.test(error.message),
+    )
+  })
+})
+
+describe('fixing, with the real scanner', { skip }, () => {
+  const WEAK_HASH = 'import hashlib\n\n\ndef digest(value):\n    return hashlib.md5(value).hexdigest()\n'
+
+  async function hashFinding(root) {
+    const { report } = await scan(options(root))
+    const finding = report.findings.find((item) => item.rule_id === 'PY007')
+    return { report, finding }
+  }
+
+  it('says which findings have a built-in fix, and gives each a fingerprint', async () => {
+    const { report, finding } = await hashFinding(workspace({ 'app/main.py': WEAK_HASH }))
+
+    assert.match(finding.fingerprint, /^[0-9a-f]{64}$/)
+    assert.equal(typeof report.quick_fixes.PY007, 'string')
+    const item = toDiagnostics(report).files.get('app/main.py').items[0]
+    assert.equal(item.fix.fingerprint, finding.fingerprint)
+    assert.equal(item.fix.builtinTitle, report.quick_fixes.PY007)
+  })
+
+  it('works out a built-in fix, checks it by re-scanning, and writes nothing', async () => {
+    const root = workspace({ 'app/main.py': WEAK_HASH })
+    const { finding } = await hashFinding(root)
+
+    const result = await fix({ ...options(root), fingerprint: finding.fingerprint, mode: 'builtin' })
+
+    assert.equal(result.status, 'verified')
+    assert.equal(fs.readFileSync(path.join(root, 'app', 'main.py'), 'utf8'), WEAK_HASH)
+    assert.equal(proposedText(WEAK_HASH, result.edits), WEAK_HASH.replace('md5', 'sha256'))
+    const lines = WEAK_HASH.split('\n')
+    assert.equal(planEdits(lines, result.edits).ok, true)
+  })
+
+  it('makes a fix that the scanner then no longer reports', async () => {
+    const root = workspace({ 'app/main.py': WEAK_HASH })
+    const { finding } = await hashFinding(root)
+    const result = await fix({ ...options(root), fingerprint: finding.fingerprint, mode: 'builtin' })
+
+    fs.writeFileSync(path.join(root, 'app', 'main.py'), proposedText(WEAK_HASH, result.edits))
+    const after = await hashFinding(root)
+
+    assert.equal(after.finding, undefined)
+  })
+
+  it('says plainly when the local model is not running', async () => {
+    const root = workspace({ 'app/main.py': WEAK_HASH })
+    const { finding } = await hashFinding(root)
+
+    await assert.rejects(
+      fix({
+        ...options(root),
+        fingerprint: finding.fingerprint,
+        mode: 'model',
+        model: { url: 'http://127.0.0.1:9', timeoutSeconds: 10 },
+      }),
+      (error) => error instanceof FixError && /Could not reach Ollama/.test(error.message),
+    )
+  })
+
+  it('refuses to send code to a model on another machine unless allowed', async () => {
+    const root = workspace({ 'app/main.py': WEAK_HASH })
+    const { finding } = await hashFinding(root)
+
+    await assert.rejects(
+      fix({ ...options(root), fingerprint: finding.fingerprint, mode: 'model', model: { url: 'http://192.0.2.1:11434' } }),
+      (error) => error instanceof FixError && /not on this machine/.test(error.message),
     )
   })
 })
