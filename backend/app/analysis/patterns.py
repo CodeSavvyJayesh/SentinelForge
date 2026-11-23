@@ -80,8 +80,11 @@ class PatternRule:
     context: Callable[[list[str], int], bool] | None = None
     # For a rule a single expression cannot state: given the text and whether
     # it is a whole statement, say whether it is a finding. Replaces ``refine``
-    # when set; ``pattern`` is then only used to say which line to report.
+    # when set.
     decide: Callable[[str, bool], bool] | None = None
+    # With ``decide``: where in the text the finding is, to say which line of a
+    # wrapped statement to report. Without it, where ``pattern`` matches.
+    locate: Callable[[str], int | None] | None = None
 
 
 def _compile(expression: str) -> re.Pattern[str]:
@@ -132,12 +135,27 @@ def _near_a_secret(lines: list[str], index: int) -> bool:
 # keyword *somewhere inside* a quoted run makes it try every split of the run.
 # Finding the literals first is linear.
 STRING_LITERAL = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`")
+# Matched against one literal at a time, quotes included, so `^` and `$` are
+# the literal's own ends.
+#
 # UPDATE is only SQL with its table and SET after it, or as a literal that is
 # nothing but the keyword, which a table name is about to be joined to. The
 # bare word is in too many messages ("failed to update " + name) to be
 # evidence of a query.
+#
+# SELECT is the same, and more so: it is an HTML element ("<select id='" + id),
+# a CSS selector (closest("select")) and an English verb ("You can only select "
+# + n + " items"), all of which were reported in Django's admin scripts. It
+# counts as SQL when what follows it is shaped like a column list — `*`,
+# DISTINCT, TOP, NEXT VALUE FOR, a function call, or a name followed by a
+# comma, a dot, FROM or AS — or when a literal is nothing but the keyword and a space, with the
+# columns about to be joined to it. UNION SELECT is SQL whatever follows.
 SQL_STATEMENT = re.compile(
-    r"(?i)\b(?:select|insert\s+into|delete\s+from)\b"
+    r"(?i)(?<![\w<>/.\-])select\s+"
+    r"(?:\*|(?:distinct|top)\b|next\s+value\s+for\b|\w+\s*\(|[\w\[\]]+(?:\s*[,.]|\s+(?:from|as)\b))"
+    r"|^[\"'`]\s*\(?\s*select\s+[\"'`]$"
+    r"|\bunion\s+(?:all\s+)?select\b"
+    r"|\b(?:insert\s+into|delete\s+from)\b"
     r"|\bupdate\s+[\w.\"`\[\]]+\s+set\b"
     r"|^[\"'`]\s*update\s+[\"'`]$"
 )
@@ -164,6 +182,14 @@ def _sql_is_built(text: str, whole_statement: bool) -> bool:
     if JOINED_TO_A_VALUE.search(outline):
         return True
     return not whole_statement and JOINED_AT_END_OF_LINE.search(outline) is not None
+
+
+def _first_sql_literal(text: str) -> int | None:
+    """Where the first literal holding SQL starts, for saying which line to report."""
+    for literal in STRING_LITERAL.finditer(text):
+        if SQL_STATEMENT.search(literal.group()):
+            return literal.start()
+    return None
 
 
 PATTERN_RULES: tuple[PatternRule, ...] = (
@@ -268,6 +294,7 @@ PATTERN_RULES: tuple[PatternRule, ...] = (
         SQL_STATEMENT,
         SQL_HOST_SUFFIXES,
         decide=_sql_is_built,
+        locate=_first_sql_literal,
     ),
 )
 
@@ -375,8 +402,12 @@ def _across_lines(rule: PatternRule, statement: list[tuple[int, str]]) -> Iterat
     if rule.decide is not None:
         if rule.decide(joined, True):
             # Reported where the SQL is, which is the line a reader looks for.
-            located = rule.pattern.search(joined)
-            yield line_of(located.start()) if located else statement[0][0]
+            if rule.locate is not None:
+                offset = rule.locate(joined)
+            else:
+                located = rule.pattern.search(joined)
+                offset = located.start() if located else None
+            yield line_of(offset) if offset is not None else statement[0][0]
         return
 
     for match in rule.pattern.finditer(joined):

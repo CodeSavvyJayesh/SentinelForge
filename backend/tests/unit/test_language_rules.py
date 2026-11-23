@@ -762,3 +762,58 @@ def test_an_update_statement_built_from_a_value_is_reported(line: str) -> None:
 def test_the_word_update_in_a_message_is_not_a_query(line: str) -> None:
     assert "SQL001" not in pattern_rules(line, ".java")
     assert "SQL001" not in pattern_rules(line, ".js")
+
+
+# --- SQL001: SELECT that is not a query ---------------------------------------
+# Each of these was reported in Django's admin scripts (SelectBox.js,
+# SelectFilter2.js and select2's English messages) before the keyword had to be
+# followed by something shaped like a column list.
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "const html = \"<select id='\" + expando + \"' name='x'></select>\";",
+        'if (elem.closest("select").id === field_id + "_to") { move(); }',
+        "return 'You can only select ' + args.maximum + ' item';",
+        "const message = 'Please select ' + count + ' more';",
+        'const selector = "select." + className;',
+        "title = 'Select an item from ' + listName;",
+    ],
+)
+def test_select_as_html_css_or_english_is_not_a_query(line: str) -> None:
+    assert "SQL001" not in pattern_rules(line, ".js")
+    assert "SQL001" not in pattern_rules(line, ".java")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'String q = "SELECT * FROM users WHERE id = " + id;',
+        'String q = "select name, email from users where id = " + id;',
+        'String q = "SELECT u.name FROM users u WHERE u.id = " + id;',
+        'String q = "SELECT name FROM users WHERE id = " + id;',
+        'String q = "SELECT count(*) FROM orders WHERE owner = \'" + owner + "\'";',
+        'String q = "SELECT DISTINCT city FROM t WHERE c = " + c;',
+        'String q = "SELECT TOP 1 userid FROM USERS WHERE USERNAME = \'" + name + "\'";',
+        'String q = "SELECT " + columns + " FROM users";',
+        'String q = "(SELECT id AS x FROM t WHERE y = " + y + ")";',
+        'String p = "x\' UNION select \'" + key + "\' from users --";',
+        'return "select next value for " + getIncrementerName();',
+    ],
+)
+def test_select_followed_by_a_column_list_is_still_a_query(line: str) -> None:
+    assert "SQL001" in pattern_rules(line, ".java")
+    assert "SQL001" in pattern_rules(line, ".js")
+
+
+def test_a_wrapped_query_is_reported_on_the_line_of_the_sql_not_an_earlier_select() -> None:
+    source = (
+        'String q = label("select one")\n        + "SELECT * FROM t WHERE id = "\n        + id;\n'
+    )
+    assert lines_reported(source, "SQL001") == [2]
+
+
+def test_a_wrapped_query_whose_sql_is_only_the_keyword_is_reported_on_that_line() -> None:
+    source = 'String q = prefix\n        + "SELECT "\n        + columns;\n'
+    assert lines_reported(source, "SQL001") == [2]

@@ -22,6 +22,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from app.analysis.findings import SEVERITY_ORDER, Finding
+from app.analysis.java_analysis import JAVA_SUFFIXES, analyze_java, build_project
+from app.analysis.java_flow import Project
 from app.analysis.patterns import analyze_with_patterns
 from app.analysis.python_ast import analyze_python_source
 from app.analysis.secrets import analyze_secrets
@@ -112,6 +114,7 @@ def analyze_workspace(root: Path, settings: Settings) -> AnalysisResult:
     started = time.monotonic()
     result = AnalysisResult()
     seen: set[str] = set()
+    java = _java_project(root, settings)
 
     for path in _source_files(root):
         if result.truncated:
@@ -124,7 +127,7 @@ def analyze_workspace(root: Path, settings: Settings) -> AnalysisResult:
 
         result.files_scanned += 1
         file_findings = _number_repeats(
-            _collapse_overlapping(_analyze_file(text, relative, path.suffix.lower(), result))
+            _collapse_overlapping(_analyze_file(text, relative, path.suffix.lower(), result, java))
         )
         for finding in file_findings:
             if finding.fingerprint in seen:
@@ -196,7 +199,21 @@ def _number_repeats(findings: list[Finding]) -> list[Finding]:
     return numbered
 
 
-def _analyze_file(text: str, relative: str, suffix: str, result: AnalysisResult) -> list[Finding]:
+def _java_project(root: Path, settings: Settings) -> Project | None:
+    """Every Java file read once, so the flow walk can follow calls between them."""
+    files: list[tuple[str, str]] = []
+    for path in _source_files(root):
+        if path.suffix.lower() not in JAVA_SUFFIXES:
+            continue
+        text = _read_text(path, settings)
+        if text is not None:
+            files.append((path.relative_to(root).as_posix(), text))
+    return build_project(files) if files else None
+
+
+def _analyze_file(
+    text: str, relative: str, suffix: str, result: AnalysisResult, java: Project | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
 
     if suffix in PYTHON_SUFFIXES:
@@ -207,6 +224,8 @@ def _analyze_file(text: str, relative: str, suffix: str, result: AnalysisResult)
             # also exhaust the recursion limit, which is not a finding either.
             result.unparsable_files += 1
             result.unparsable_paths.append(relative)
+    elif suffix in JAVA_SUFFIXES:
+        findings.extend(analyze_java(text, relative, suffix, java))
     else:
         findings.extend(analyze_with_patterns(text, relative, suffix))
 

@@ -408,6 +408,75 @@ JAVA_INSECURE_COOKIE = _rule(
     "CWE-614",
     "A05:2021 Security Misconfiguration",
 )
+JAVA_COMMAND_FROM_REQUEST = _rule(
+    "JV007",
+    "Request data in an operating-system command",
+    "A value read from the request reaches Runtime.exec or a ProcessBuilder, as "
+    "part of the command, one of its arguments or its environment. Run a fixed "
+    "program with a fixed list of arguments, and check any value from the "
+    "request against a list of allowed ones first.",
+    Severity.CRITICAL,
+    Confidence.HIGH,
+    "CWE-78",
+    "A03:2021 Injection",
+)
+JAVA_PATH_FROM_REQUEST = _rule(
+    "JV008",
+    "Request data used as a file path",
+    "A value from the request decides which file is opened, so '../' or an "
+    "absolute path reaches files outside the intended folder. Resolve the path "
+    "and check it is still inside the base folder, or look the name up in a list "
+    "of allowed ones.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-22",
+    "A01:2021 Broken Access Control",
+)
+JAVA_LDAP_FROM_REQUEST = _rule(
+    "JV009",
+    "Request data in an LDAP filter",
+    "A value from the request is part of a directory search filter, where "
+    "*)(objectClass=* matches every entry. Escape it for LDAP filters, or pass "
+    "it as a filter argument ({0}) rather than joining it in.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-90",
+    "A03:2021 Injection",
+)
+JAVA_XPATH_FROM_REQUEST = _rule(
+    "JV010",
+    "Request data in an XPath expression",
+    "A value from the request is joined into an XPath expression, where "
+    "' or '1'='1 changes which nodes are selected. Use XPath variables "
+    "(XPathVariableResolver) or validate the value against a strict pattern.",
+    Severity.HIGH,
+    Confidence.HIGH,
+    "CWE-643",
+    "A03:2021 Injection",
+)
+JAVA_XSS_FROM_REQUEST = _rule(
+    "JV011",
+    "Request data written into an HTML response",
+    "A value from the request is written to the response without being escaped, "
+    "so a script tag in it runs in the visitor's session. Escape it for HTML "
+    "(an encoder such as OWASP Java Encoder's Encode.forHtml) or render it "
+    "through a template that escapes.",
+    Severity.HIGH,
+    Confidence.MEDIUM,
+    "CWE-79",
+    "A03:2021 Injection",
+)
+JAVA_TRUST_BOUNDARY = _rule(
+    "JV012",
+    "Request data stored in the session without validation",
+    "The session is trusted by the code that reads it later. Storing a value "
+    "from the request there, unvalidated, lets a caller plant data that will be "
+    "treated as the server's own. Validate it before it is stored.",
+    Severity.MEDIUM,
+    Confidence.MEDIUM,
+    "CWE-501",
+    "A04:2021 Insecure Design",
+)
 SQL_CONCATENATION = _rule(
     "SQL001",
     "SQL query built by concatenation",
@@ -524,6 +593,12 @@ ALL_RULES: tuple[Rule, ...] = (
     JAVA_WEAK_CIPHER,
     JAVA_WEAK_RANDOM,
     JAVA_INSECURE_COOKIE,
+    JAVA_COMMAND_FROM_REQUEST,
+    JAVA_PATH_FROM_REQUEST,
+    JAVA_LDAP_FROM_REQUEST,
+    JAVA_XPATH_FROM_REQUEST,
+    JAVA_XSS_FROM_REQUEST,
+    JAVA_TRUST_BOUNDARY,
     SQL_CONCATENATION,
     PHP_COMMAND,
     GO_SHELL,
